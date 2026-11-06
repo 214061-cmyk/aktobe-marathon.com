@@ -15,6 +15,7 @@ import { RegistrationModal } from './components/Registration/RegistrationModal';
 import { AdminPanel } from './components/Admin/AdminPanel';
 import { AdminLogin } from './components/Admin/AdminLogin';
 import { DocumentModal } from './components/Legal/DocumentModal';
+import { Trophy } from 'lucide-react';
 
 export function App() {
   const [isAdminView, setIsAdminView] = useState(false);
@@ -77,15 +78,10 @@ export function App() {
     handleBackToSite();
   };
 
-  const activeEvent = events.find(e => e.id === activeEventId) || events[0];
-
-  if (!activeEvent) {
-    return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center font-bold">
-        Загрузка платформы...
-      </div>
-    );
-  }
+  const publicEvents = events.filter(e => e.status !== 'completed');
+  const activeEvent = isAdminView
+    ? (events.find(e => e.id === activeEventId) || events[0])
+    : (publicEvents.find(e => e.id === activeEventId) || publicEvents[0]);
 
   // Admin View: If user requested admin, check if authenticated
   if (isAdminView) {
@@ -102,9 +98,36 @@ export function App() {
       <AdminPanel
         onBackToSite={handleBackToSite}
         onLogout={handleLogout}
-        activeEventId={activeEvent.id}
+        activeEventId={activeEvent?.id || events[0]?.id || 'aktobe-2026'}
         onSelectEvent={(id) => setActiveEventId(id)}
       />
+    );
+  }
+
+  // If on public site and no active public events exist (all in archive)
+  if (!activeEvent) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-20 h-20 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center mb-6 shadow-inner">
+          <Trophy className="w-10 h-10" />
+        </div>
+        <h1 className="text-3xl sm:text-4xl font-black font-athletic text-slate-950 uppercase tracking-tight">
+          Все забеги сезона завершены
+        </h1>
+        <p className="text-slate-600 text-sm max-w-md mt-2">
+          Все проведенные старты перемещены в архив. Скоро здесь появятся анонсы новых масштабных забегов.
+        </p>
+        <button
+          onClick={() => setIsResultsOpen(true)}
+          className="mt-6 px-6 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-red-500/25 transition-all cursor-pointer"
+        >
+          Смотреть финишные протоколы
+        </button>
+        <ResultsModal
+          isOpen={isResultsOpen}
+          onClose={() => setIsResultsOpen(false)}
+        />
+      </div>
     );
   }
 
@@ -138,7 +161,7 @@ export function App() {
           
           {/* Section 0: All Marathon Events Calendar */}
           <EventsShowcase
-            events={events}
+            events={publicEvents}
             activeEventId={activeEvent.id}
             onSelectEvent={(id) => setActiveEventId(id)}
             onOpenRegistration={(id) => {

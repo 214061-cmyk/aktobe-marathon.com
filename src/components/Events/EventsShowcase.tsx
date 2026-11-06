@@ -15,6 +15,13 @@ export const EventsShowcase: React.FC<EventsShowcaseProps> = ({
   onSelectEvent,
   onOpenRegistration,
 }) => {
+  // Hide completed / past events from public view
+  const visibleEvents = events.filter(ev => ev.status !== 'completed');
+
+  if (visibleEvents.length === 0) {
+    return null;
+  }
+
   return (
     <section id="events-showcase" className="scroll-mt-24 space-y-6">
       {/* Section Header */}
@@ -34,13 +41,13 @@ export const EventsShowcase: React.FC<EventsShowcaseProps> = ({
 
         <div className="text-xs text-slate-600 bg-white border border-slate-200 px-4 py-2 rounded-full flex items-center gap-2 self-start sm:self-auto shadow-xs">
           <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-          Всего событий в серии: <b className="text-slate-900">{events.length}</b>
+          Всего событий в серии: <b className="text-slate-900">{visibleEvents.length}</b>
         </div>
       </div>
 
       {/* Events Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {events.map((ev) => {
+        {visibleEvents.map((ev) => {
           const isActive = ev.id === activeEventId;
           const totalRegistered = ev.distances.reduce((sum, d) => sum + (d.registeredCount || 0), 0);
           const totalSlots = ev.totalSlots || 4500;
