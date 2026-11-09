@@ -1,11 +1,12 @@
-import type { MarathonEvent, Participant, RaceResult, Distance } from '../types/marathon';
-import { INITIAL_EVENTS, INITIAL_PARTICIPANTS, INITIAL_RESULTS } from '../data/initialData';
+import type { MarathonEvent, Participant, RaceResult, Distance, DocumentKey, LegalDocument } from '../types/marathon';
+import { INITIAL_EVENTS, INITIAL_PARTICIPANTS, INITIAL_RESULTS, INITIAL_LEGAL_DOCUMENTS } from '../data/initialData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import * as XLSX from 'xlsx';
 
 const STORAGE_KEY_EVENTS = 'qazaq_run_events_v2';
 const STORAGE_KEY_PARTICIPANTS = 'qazaq_run_participants_v2';
 const STORAGE_KEY_RESULTS = 'qazaq_run_results_v2';
+const STORAGE_KEY_DOCUMENTS = 'qazaq_run_documents_v2';
 
 function eventToDb(e: MarathonEvent) {
   return {
@@ -121,6 +122,7 @@ class MarathonStorage {
   private events: MarathonEvent[] = [];
   private participants: Participant[] = [];
   private results: RaceResult[] = [];
+  private documents: Record<DocumentKey, LegalDocument> = INITIAL_LEGAL_DOCUMENTS;
   private isSyncing = false;
 
   constructor() {
@@ -137,10 +139,14 @@ class MarathonStorage {
 
       const storedRes = localStorage.getItem(STORAGE_KEY_RESULTS);
       this.results = storedRes ? JSON.parse(storedRes) : INITIAL_RESULTS;
+
+      const storedDocs = localStorage.getItem(STORAGE_KEY_DOCUMENTS);
+      this.documents = storedDocs ? { ...INITIAL_LEGAL_DOCUMENTS, ...JSON.parse(storedDocs) } : INITIAL_LEGAL_DOCUMENTS;
     } catch {
       this.events = INITIAL_EVENTS;
       this.participants = INITIAL_PARTICIPANTS;
       this.results = INITIAL_RESULTS;
+      this.documents = INITIAL_LEGAL_DOCUMENTS;
     }
 
     // If Supabase SQL is configured, sync in background
@@ -212,6 +218,7 @@ class MarathonStorage {
       localStorage.setItem(STORAGE_KEY_EVENTS, JSON.stringify(this.events));
       localStorage.setItem(STORAGE_KEY_PARTICIPANTS, JSON.stringify(this.participants));
       localStorage.setItem(STORAGE_KEY_RESULTS, JSON.stringify(this.results));
+      localStorage.setItem(STORAGE_KEY_DOCUMENTS, JSON.stringify(this.documents));
     } catch (e) {
       console.error('Storage cache error', e);
     }
@@ -220,6 +227,21 @@ class MarathonStorage {
   private persist() {
     this.persistLocalOnly();
     window.dispatchEvent(new Event('marathon-storage-update'));
+  }
+
+  // --- LEGAL DOCUMENTS ---
+  public getDocuments(): Record<DocumentKey, LegalDocument> {
+    return { ...this.documents };
+  }
+
+  public getDocument(key: DocumentKey): LegalDocument {
+    return this.documents[key] || INITIAL_LEGAL_DOCUMENTS[key];
+  }
+
+  public saveDocument(doc: LegalDocument): LegalDocument {
+    this.documents[doc.key] = doc;
+    this.persist();
+    return doc;
   }
 
   // --- EVENTS ---

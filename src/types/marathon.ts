@@ -6,6 +6,19 @@ export type PaymentMethod = 'kaspi' | 'card' | 'apple_pay';
 
 export type PaymentStatus = 'paid' | 'pending' | 'refunded';
 
+export type DocumentKey = 'regulation' | 'offer' | 'privacy' | 'medical' | 'transfer';
+
+export interface LegalDocument {
+  key: DocumentKey;
+  title: string;
+  subtitle?: string;
+  date?: string;
+  fileUrl?: string; // Direct link or Data URL for PDF/DOC
+  fileName?: string; // Name of uploaded file e.g. "Polozhenie_Aqtobe_2026.pdf"
+  fileSize?: string; // e.g. "2.4 MB"
+  contentHtml?: string; // Editable custom text
+}
+
 export interface AgeCategory {
   id: string;
   name: string; // e.g. "18-25 лет"

@@ -15,6 +15,7 @@ import { RegistrationModal } from './components/Registration/RegistrationModal';
 import { AdminPanel } from './components/Admin/AdminPanel';
 import { AdminLogin } from './components/Admin/AdminLogin';
 import { DocumentModal } from './components/Legal/DocumentModal';
+import { OffSeasonView } from './components/OffSeason/OffSeasonView';
 import { Trophy } from 'lucide-react';
 
 export function App() {
@@ -104,28 +105,48 @@ export function App() {
     );
   }
 
-  // If on public site and no active public events exist (all in archive)
+  // Fallback sponsors from events
+  const allSponsors = events.find(e => e.sponsors && e.sponsors.length > 0)?.sponsors || events[0]?.sponsors || [];
+
+  // If on public site and no active public events exist (all in archive / off-season)
   if (!activeEvent) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-20 h-20 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center mb-6 shadow-inner">
-          <Trophy className="w-10 h-10" />
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-black font-athletic text-slate-950 uppercase tracking-tight">
-          Все забеги сезона завершены
-        </h1>
-        <p className="text-slate-600 text-sm max-w-md mt-2">
-          Все проведенные старты перемещены в архив. Скоро здесь появятся анонсы новых масштабных забегов.
-        </p>
-        <button
-          onClick={() => setIsResultsOpen(true)}
-          className="mt-6 px-6 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-red-500/25 transition-all cursor-pointer"
-        >
-          Смотреть финишные протоколы
-        </button>
+      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-red-600 selection:text-white">
+        {/* Top Navbar */}
+        <Navbar
+          onOpenRegistration={() => {
+            setSelectedDistanceId(undefined);
+            setIsRegistrationOpen(true);
+          }}
+          onOpenResults={() => setIsResultsOpen(true)}
+        />
+
+        {/* Main Off-Season View */}
+        <main className="space-y-24 pb-20">
+          <OffSeasonView
+            completedEvents={events}
+            sponsors={allSponsors}
+            onOpenResults={() => setIsResultsOpen(true)}
+          />
+        </main>
+
+        {/* Footer */}
+        <Footer
+          sponsors={allSponsors}
+          onOpenDocument={(key) => setActiveDocumentKey(key)}
+        />
+
+        {/* Results & Finisher Diplomas Modal */}
         <ResultsModal
           isOpen={isResultsOpen}
           onClose={() => setIsResultsOpen(false)}
+        />
+
+        {/* Legal & Regulation Document Modal */}
+        <DocumentModal
+          isOpen={activeDocumentKey !== null}
+          onClose={() => setActiveDocumentKey(null)}
+          documentKey={activeDocumentKey}
         />
       </div>
     );
