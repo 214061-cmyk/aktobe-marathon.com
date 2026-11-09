@@ -1,15 +1,127 @@
 import type { MarathonEvent, Participant, RaceResult, Distance } from '../types/marathon';
 import { INITIAL_EVENTS, INITIAL_PARTICIPANTS, INITIAL_RESULTS } from '../data/initialData';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 import * as XLSX from 'xlsx';
 
 const STORAGE_KEY_EVENTS = 'qazaq_run_events_v2';
 const STORAGE_KEY_PARTICIPANTS = 'qazaq_run_participants_v2';
 const STORAGE_KEY_RESULTS = 'qazaq_run_results_v2';
 
+function eventToDb(e: MarathonEvent) {
+  return {
+    id: e.id,
+    title: e.title,
+    slug: e.slug || e.id,
+    subtitle: e.subtitle || '',
+    date: e.date,
+    display_date: e.displayDate,
+    city: e.city,
+    location: e.location,
+    status: e.status,
+    description: e.description || '',
+    banner_image: e.bannerImage || '',
+    prize_pool: e.prizePool || '',
+    total_slots: e.totalSlots || 4500,
+    center_coords: e.centerCoords,
+    distances: e.distances,
+    schedule: e.schedule || [],
+    sponsors: e.sponsors || [],
+    options_config: e.optionsConfig
+  };
+}
+
+function dbToEvent(row: any): MarathonEvent {
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug || row.id,
+    subtitle: row.subtitle,
+    date: row.date,
+    displayDate: row.display_date || row.displayDate,
+    city: row.city,
+    location: row.location,
+    status: row.status,
+    description: row.description,
+    bannerImage: row.banner_image || row.bannerImage,
+    prizePool: row.prize_pool || row.prizePool,
+    totalSlots: row.total_slots || row.totalSlots,
+    centerCoords: row.center_coords || row.centerCoords || [50.2877, 57.1856],
+    distances: row.distances || [],
+    schedule: row.schedule || [],
+    sponsors: row.sponsors || [],
+    optionsConfig: row.options_config || row.optionsConfig
+  };
+}
+
+function participantToDb(p: Participant) {
+  return {
+    id: p.id,
+    event_id: p.eventId,
+    distance_id: p.distanceId,
+    distance_name: p.distanceName,
+    bib_number: p.bibNumber,
+    first_name: p.firstName,
+    last_name: p.lastName,
+    gender: p.gender,
+    birth_date: p.birthDate,
+    age: p.age,
+    age_category: p.ageCategory,
+    email: p.email,
+    phone: p.phone,
+    city: p.city,
+    country: p.country || 'Казахстан',
+    club: p.club || '',
+    wants_tshirt: Boolean(p.wantsTShirt),
+    tshirt_size: p.tShirtSize || null,
+    emergency_contact: p.emergencyContact || '',
+    medal_engraving: Boolean(p.medalEngraving),
+    pasta_party: Boolean(p.pastaParty),
+    charity_contribution: p.charityContribution || 0,
+    total_amount: p.totalAmount,
+    payment_status: p.paymentStatus || 'paid',
+    payment_method: p.paymentMethod || 'kaspi',
+    registration_date: p.registrationDate,
+    checked_in_expo: Boolean(p.checkedInExpo)
+  };
+}
+
+function dbToParticipant(row: any): Participant {
+  return {
+    id: row.id,
+    eventId: row.event_id || row.eventId,
+    distanceId: row.distance_id || row.distanceId,
+    distanceName: row.distance_name || row.distanceName,
+    bibNumber: row.bib_number || row.bibNumber,
+    firstName: row.first_name || row.firstName,
+    lastName: row.last_name || row.lastName,
+    gender: row.gender,
+    birthDate: row.birth_date || row.birthDate,
+    age: row.age,
+    ageCategory: row.age_category || row.ageCategory,
+    email: row.email,
+    phone: row.phone,
+    city: row.city,
+    country: row.country,
+    club: row.club,
+    wantsTShirt: row.wants_tshirt ?? row.wantsTShirt,
+    tShirtSize: row.tshirt_size || row.tShirtSize,
+    emergencyContact: row.emergency_contact || row.emergencyContact,
+    medalEngraving: row.medal_engraving ?? row.medalEngraving,
+    pastaParty: row.pasta_party ?? row.pastaParty,
+    charityContribution: row.charity_contribution ?? row.charityContribution,
+    totalAmount: row.total_amount ?? row.totalAmount,
+    paymentStatus: row.payment_status || row.paymentStatus || 'paid',
+    paymentMethod: row.payment_method || row.paymentMethod || 'kaspi',
+    registrationDate: row.registration_date || row.registrationDate,
+    checkedInExpo: row.checked_in_expo ?? row.checkedInExpo
+  };
+}
+
 class MarathonStorage {
   private events: MarathonEvent[] = [];
   private participants: Participant[] = [];
   private results: RaceResult[] = [];
+  private isSyncing = false;
 
   constructor() {
     this.init();
@@ -30,17 +142,84 @@ class MarathonStorage {
       this.participants = INITIAL_PARTICIPANTS;
       this.results = INITIAL_RESULTS;
     }
+
+    // If Supabase SQL is configured, sync in background
+    if (isSupabaseConfigured && supabase) {
+      this.syncFromSupabase();
+      this.setupRealtimeSubscription();
+    }
   }
 
-  private persist() {
+  public async syncFromSupabase() {
+    if (!supabase || this.isSyncing) return;
+    this.isSyncing = true;
+
+    try {
+      // 1. Fetch events
+      const { data: dbEvents, error: eventsErr } = await supabase
+        .from('events')
+        .select('*')
+        .order('date', { ascending: true });
+
+      if (!eventsErr && dbEvents && dbEvents.length > 0) {
+        this.events = dbEvents.map(dbToEvent);
+      } else if (!eventsErr && (!dbEvents || dbEvents.length === 0)) {
+        // Seed initial events to Supabase if database table is empty
+        for (const ev of this.events) {
+          await supabase.from('events').upsert(eventToDb(ev));
+        }
+      }
+
+      // 2. Fetch participants
+      const { data: dbParts, error: partsErr } = await supabase
+        .from('participants')
+        .select('*')
+        .order('registration_date', { ascending: false });
+
+      if (!partsErr && dbParts && dbParts.length > 0) {
+        this.participants = dbParts.map(dbToParticipant);
+      }
+
+      // Persist local cache & notify UI
+      this.persistLocalOnly();
+      window.dispatchEvent(new Event('marathon-storage-update'));
+    } catch (e) {
+      console.warn('Supabase sync skipped, working in local mode', e);
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+
+  private setupRealtimeSubscription() {
+    if (!supabase) return;
+    try {
+      supabase
+        .channel('marathon_cloud_sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+          this.syncFromSupabase();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, () => {
+          this.syncFromSupabase();
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn('Realtime subscription error', e);
+    }
+  }
+
+  private persistLocalOnly() {
     try {
       localStorage.setItem(STORAGE_KEY_EVENTS, JSON.stringify(this.events));
       localStorage.setItem(STORAGE_KEY_PARTICIPANTS, JSON.stringify(this.participants));
       localStorage.setItem(STORAGE_KEY_RESULTS, JSON.stringify(this.results));
-      window.dispatchEvent(new Event('marathon-storage-update'));
     } catch (e) {
-      console.error('Storage error', e);
+      console.error('Storage cache error', e);
     }
+  }
+
+  private persist() {
+    this.persistLocalOnly();
+    window.dispatchEvent(new Event('marathon-storage-update'));
   }
 
   // --- EVENTS ---
@@ -60,12 +239,27 @@ class MarathonStorage {
       this.events.unshift(event);
     }
     this.persist();
+
+    // Async sync to SQL Database
+    if (supabase) {
+      supabase.from('events').upsert(eventToDb(event)).then(({ error }) => {
+        if (error) console.error('Supabase saveEvent error:', error);
+      });
+    }
+
     return event;
   }
 
   public deleteEvent(id: string): void {
     this.events = this.events.filter(e => e.id !== id);
     this.persist();
+
+    // Async sync to SQL Database
+    if (supabase) {
+      supabase.from('events').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase deleteEvent error:', error);
+      });
+    }
   }
 
   // --- PARTICIPANTS ---
@@ -104,6 +298,13 @@ class MarathonStorage {
       this.persist();
     }
 
+    // Async sync to SQL Database
+    if (supabase) {
+      supabase.from('participants').insert(participantToDb(newParticipant)).then(({ error }) => {
+        if (error) console.error('Supabase registerParticipant error:', error);
+      });
+    }
+
     return newParticipant;
   }
 
@@ -112,6 +313,13 @@ class MarathonStorage {
     if (idx >= 0) {
       this.participants[idx] = participant;
       this.persist();
+
+      // Async sync to SQL Database
+      if (supabase) {
+        supabase.from('participants').update(participantToDb(participant)).eq('id', participant.id).then(({ error }) => {
+          if (error) console.error('Supabase updateParticipant error:', error);
+        });
+      }
     }
     return participant;
   }
@@ -127,13 +335,29 @@ class MarathonStorage {
     }
     this.participants = this.participants.filter(item => item.id !== id);
     this.persist();
+
+    // Async sync to SQL Database
+    if (supabase) {
+      supabase.from('participants').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase deleteParticipant error:', error);
+      });
+    }
   }
 
   public toggleExpoCheckin(id: string): Participant | undefined {
     const idx = this.participants.findIndex(p => p.id === id);
     if (idx >= 0) {
       this.participants[idx].checkedInExpo = !this.participants[idx].checkedInExpo;
+      const isChecked = this.participants[idx].checkedInExpo;
       this.persist();
+
+      // Async sync to SQL Database
+      if (supabase) {
+        supabase.from('participants').update({ checked_in_expo: isChecked }).eq('id', id).then(({ error }) => {
+          if (error) console.error('Supabase toggleExpoCheckin error:', error);
+        });
+      }
+
       return this.participants[idx];
     }
     return undefined;

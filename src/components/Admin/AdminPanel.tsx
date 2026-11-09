@@ -9,7 +9,7 @@ import {
   DollarSign, TrendingUp, RefreshCw, Download, ChevronRight,
   MapPin, Clock, Award, AlertCircle, AlertTriangle, CheckCircle2,
   Tag, Layers, Sparkles, ExternalLink, Globe, Shirt, Utensils, Heart, Image as ImageIcon,
-  CalendarDays, Flag, LogOut
+  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -28,7 +28,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [events, setEvents] = useState<MarathonEvent[]>([]);
   const [currentEvent, setCurrentEvent] = useState<MarathonEvent | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive'>('overview');
 
   // Participants Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -225,6 +225,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const totalRevenue = participants.reduce((sum, p) => sum + p.totalAmount, 0);
   const paidRunners = participants.filter(p => p.paymentStatus === 'paid').length;
   const expoCheckedInCount = participants.filter(p => p.checkedInExpo).length;
+  const archivedEvents = events.filter(e => e.status === 'completed');
+  const activeEventsList = events.filter(e => e.status !== 'completed');
 
   // Unique categories for filter dropdown
   const allCategoriesSet = new Set<string>();
@@ -433,6 +435,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     marathonStorage.saveEvent(updated);
     alert('Параметры забега успешно сохранены! Дата старта, опции и настройки обновлены.');
     refreshData();
+  };
+
+  const handleArchiveEvent = (eventId: string) => {
+    const ev = events.find(e => e.id === eventId);
+    if (!ev) return;
+    const updated: MarathonEvent = { ...ev, status: 'completed' };
+    marathonStorage.saveEvent(updated);
+    refreshData();
+  };
+
+  const handleRestoreEvent = (eventId: string) => {
+    const ev = events.find(e => e.id === eventId);
+    if (!ev) return;
+    const updated: MarathonEvent = { ...ev, status: 'registration_open' };
+    marathonStorage.saveEvent(updated);
+    refreshData();
+  };
+
+  const handleDeleteEvent = (eventId: string) => {
+    if (events.length <= 1) {
+      alert('Нельзя удалить единственное оставшееся событие.');
+      return;
+    }
+    if (window.confirm('Вы действительно хотите удалить этот забег? Это действие необратимо.')) {
+      marathonStorage.deleteEvent(eventId);
+      const remaining = events.filter(e => e.id !== eventId);
+      if (currentEvent?.id === eventId && remaining.length > 0) {
+        onSelectEvent(remaining[0].id);
+      }
+      refreshData();
+    }
   };
 
   // Sponsor Handlers
@@ -863,11 +896,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             onChange={(e) => onSelectEvent(e.target.value)}
             className="bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-lime-400"
           >
-            {events.map(ev => (
-              <option key={ev.id} value={ev.id}>
-                {ev.title} ({ev.city})
-              </option>
-            ))}
+            {activeEventsList.length > 0 && (
+              <optgroup label="Активные на сайте">
+                {activeEventsList.map(ev => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.title} ({ev.city})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {archivedEvents.length > 0 && (
+              <optgroup label="Архив / Завершенные">
+                {archivedEvents.map(ev => (
+                  <option key={ev.id} value={ev.id}>
+                    📁 {ev.title} ({ev.city}) [АРХИВ]
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
 
           <button
@@ -902,6 +948,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           )}
         </div>
       </header>
+
+      {/* Archived Event Notice Banner */}
+      {currentEvent.status === 'completed' && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-300">
+          <div className="flex items-center gap-2">
+            <Archive className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <b>Забег находится в Архиве:</b> Событие «{currentEvent.title}» завершено и скрыто с публичной части сайта. Участники и протоколы сохранены.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleRestoreEvent(currentEvent.id)}
+            className="px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-black text-[11px] uppercase flex items-center gap-1.5 shadow-sm transition-all self-start sm:self-auto cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Вернуть забег на сайт
+          </button>
+        </div>
+      )}
 
       {/* Main Layout */}
       <div className="flex-1 flex flex-col md:flex-row">
@@ -980,6 +1045,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           >
             <Calendar className="w-4 h-4" />
             Параметры забега
+          </button>
+
+          <button
+            onClick={() => setActiveTab('archive')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'archive'
+                ? 'bg-amber-400 text-black shadow-lg shadow-amber-400/15'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Archive className="w-4 h-4" />
+              Архив забегов
+            </div>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+              activeTab === 'archive' ? 'bg-black text-white font-bold' : 'bg-zinc-800 text-amber-400 font-bold'
+            }`}>
+              {archivedEvents.length}
+            </span>
           </button>
 
           <button
@@ -1613,13 +1697,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     Редактируйте дату и время старта, локацию, лимиты и опции стартового пакета
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsCreateEventOpen(true)}
-                  className="px-3.5 py-2 rounded-xl bg-lime-400 text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md hover:bg-lime-300 self-start sm:self-auto cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Создать новый забег
-                </button>
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                  {currentEvent.status === 'completed' ? (
+                    <button
+                      type="button"
+                      onClick={() => handleRestoreEvent(currentEvent.id)}
+                      className="px-3.5 py-2 rounded-xl bg-amber-400 text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md hover:bg-amber-300 transition-all cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" /> Вернуть из архива на сайт
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Отправить «${currentEvent.title}» в архив? Забег завершится и будет скрыт с сайта.`)) {
+                          handleArchiveEvent(currentEvent.id);
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-amber-400/20 text-amber-400 border border-amber-400/40 font-black text-xs uppercase flex items-center gap-1.5 shadow-md hover:bg-amber-400 hover:text-black transition-all cursor-pointer"
+                    >
+                      <Archive className="w-3.5 h-3.5" /> Отправить в архив
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateEventOpen(true)}
+                    className="px-3.5 py-2 rounded-xl bg-lime-400 text-black font-black text-xs uppercase flex items-center gap-1.5 shadow-md hover:bg-lime-300 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Создать новый забег
+                  </button>
+                </div>
               </div>
 
               <form onSubmit={handleSaveEvent} className="space-y-6 text-xs">
@@ -1755,10 +1862,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <option value="registration_open">Регистрация открыта</option>
                         <option value="coming_soon">Скоро открытие</option>
                         <option value="sold_out">Все слоты проданы</option>
-                        <option value="completed">Забег завершен</option>
+                        <option value="completed">📁 Забег завершен (переместить в архив)</option>
                       </select>
                     </div>
                   </div>
+
+                  {eventForm.status === 'completed' && (
+                    <div className="p-3.5 rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs flex items-start gap-2.5">
+                      <Archive className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold text-amber-400">Событие переносится в архив</div>
+                        <p className="text-[11px] text-zinc-300 mt-0.5 leading-relaxed">
+                          При статусе «Забег завершен» мероприятие <b>не отображается на главной странице сайта</b> для обычных пользователей. Вся история, база участников и протоколы финишеров доступны во вкладке <b>«Архив забегов»</b>.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-zinc-400 font-bold mb-1">Описание мероприятия</label>
@@ -1938,6 +2057,188 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   Сохранить все параметры забега
                 </button>
               </form>
+            </div>
+          )}
+
+          {/* TAB: ARCHIVE / COMPLETED EVENTS */}
+          {activeTab === 'archive' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">
+                    <Archive className="w-4 h-4" />
+                    Архив и завершенные забеги
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black font-athletic text-white">
+                    АРХИВ ЗАВЕРШЕННЫХ СТАРТОВ
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-1 max-w-2xl">
+                    Завершенные забеги автоматически скрыты с главной страницы сайта, но их списки участников, результаты и история сохранены. Вы можете вернуть забег из архива на сайт в любой момент.
+                  </p>
+                </div>
+
+                <div className="text-xs text-zinc-400 bg-zinc-900 border border-zinc-800 px-3.5 py-2 rounded-xl flex items-center gap-2 self-start sm:self-auto">
+                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  В архиве: <b className="text-white">{archivedEvents.length}</b> событий
+                </div>
+              </div>
+
+              {archivedEvents.length === 0 ? (
+                <div className="bg-[#0e0f17] border border-zinc-800 rounded-3xl p-12 text-center space-y-4">
+                  <div className="w-16 h-16 rounded-2xl bg-amber-400/10 text-amber-400 flex items-center justify-center mx-auto border border-amber-400/20">
+                    <Archive className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-lg font-black text-white font-athletic">
+                    В АРХИВЕ ПОКА НЕТ ЗАБЕГОВ
+                  </h3>
+                  <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                    Когда забег завершится, перейдите в «Параметры забега» и выберите статус «Забег завершен» (или нажмите кнопку «Отправить в архив»). Событие автоматически переместится сюда и исчезнет с витрины сайта.
+                  </p>
+                  {currentEvent && currentEvent.status !== 'completed' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Отправить забег «${currentEvent.title}» в архив? Он перестанет отображаться на сайте.`)) {
+                          handleArchiveEvent(currentEvent.id);
+                        }
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 border border-amber-400/30 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      <Archive className="w-4 h-4" />
+                      Перенести текущий забег «{currentEvent.title}» в архив
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {archivedEvents.map(ev => {
+                    const eventParticipants = marathonStorage.getParticipants(ev.id);
+                    const isCurrent = currentEvent?.id === ev.id;
+
+                    return (
+                      <div
+                        key={ev.id}
+                        className={`bg-[#0e0f17] border-2 rounded-3xl overflow-hidden flex flex-col justify-between transition-all ${
+                          isCurrent ? 'border-amber-400/60 ring-2 ring-amber-400/10' : 'border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        {/* Event Card Header Image */}
+                        <div className="relative h-44 w-full bg-zinc-900 overflow-hidden">
+                          <img
+                            src={ev.bannerImage || 'https://images.unsplash.com/photo-1452626038306-9aae5e071dd3?q=80&w=1600&auto=format&fit=crop'}
+                            alt={ev.title}
+                            className="w-full h-full object-cover grayscale opacity-60"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-[#0e0f17] via-[#0e0f17]/40 to-black/30" />
+
+                          {/* Top Badges */}
+                          <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
+                            <span className="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider bg-zinc-900/90 text-amber-400 border border-amber-400/40 flex items-center gap-1.5 shadow-md">
+                              <Archive className="w-3 h-3 text-amber-400" /> В архиве (Завершен)
+                            </span>
+
+                            <span className="text-[11px] font-bold text-zinc-300 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10 flex items-center gap-1">
+                              <MapPin className="w-3.5 h-3.5 text-zinc-400" />
+                              {ev.city}
+                            </span>
+                          </div>
+
+                          <div className="absolute bottom-3 left-4 right-4">
+                            <div className="text-[11px] font-bold text-amber-400 mb-0.5 flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5" />
+                              {ev.displayDate || ev.date}
+                            </div>
+                            <h3 className="text-lg font-black text-white line-clamp-1 font-athletic">
+                              {ev.title}
+                            </h3>
+                          </div>
+                        </div>
+
+                        {/* Card Body */}
+                        <div className="p-5 space-y-4 flex-1 flex flex-col justify-between">
+                          <div className="space-y-3">
+                            <p className="text-xs text-zinc-400 line-clamp-2">
+                              {ev.description || ev.subtitle || 'Завершенный забег платформы.'}
+                            </p>
+
+                            {/* Stats */}
+                            <div className="grid grid-cols-3 gap-2 p-3 bg-zinc-950/80 rounded-2xl border border-zinc-800/80 text-center">
+                              <div>
+                                <div className="text-[10px] text-zinc-500 font-semibold uppercase">Участников</div>
+                                <div className="text-sm font-black text-white font-mono mt-0.5">
+                                  {eventParticipants.length}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-zinc-500 font-semibold uppercase">Дистанций</div>
+                                <div className="text-sm font-black text-lime-400 font-mono mt-0.5">
+                                  {ev.distances?.length || 0}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-zinc-500 font-semibold uppercase">Призовой фонд</div>
+                                <div className="text-sm font-black text-amber-400 font-mono mt-0.5">
+                                  {ev.prizePool || '—'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="pt-4 border-t border-zinc-800/80 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleRestoreEvent(ev.id);
+                                onSelectEvent(ev.id);
+                              }}
+                              className="flex-1 py-2 px-3 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-black text-xs uppercase flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+                              title="Вернуть забег на сайт, чтобы он снова стал виден пользователям"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              Вернуть на сайт
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onSelectEvent(ev.id);
+                                setActiveTab('participants');
+                              }}
+                              className="py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs flex items-center gap-1.5 border border-zinc-700 transition-all cursor-pointer"
+                              title="Посмотреть финишные протоколы и список атлетов"
+                            >
+                              <Users className="w-3.5 h-3.5 text-zinc-400" />
+                              Протоколы ({eventParticipants.length})
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onSelectEvent(ev.id);
+                                setActiveTab('events');
+                              }}
+                              className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-all cursor-pointer"
+                              title="Редактировать параметры забега"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteEvent(ev.id)}
+                              className="p-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-white border border-red-900/40 transition-all cursor-pointer"
+                              title="Удалить окончательно"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

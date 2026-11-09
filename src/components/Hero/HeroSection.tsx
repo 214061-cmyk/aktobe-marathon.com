@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MarathonEvent } from '../../types/marathon';
-import { 
-  Flame, Calendar, MapPin, Trophy, Users, Globe2, 
-  ArrowRight, ShieldCheck, Sparkles, Navigation, Play, Image as ImageIcon
-} from 'lucide-react';
+import { Calendar, MapPin, Trophy, Play, Image as ImageIcon } from 'lucide-react';
 
 interface HeroSectionProps {
   event: MarathonEvent;
@@ -12,9 +9,7 @@ interface HeroSectionProps {
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
-  event,
-  onRegisterClick,
-  onExploreMapClick
+  event
 }) => {
   // Live Countdown to Race Day
   const targetDate = new Date(event.date).getTime();
@@ -70,7 +65,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     return () => clearInterval(interval);
   }, [targetDate]);
 
-  // Auto-rotate runner photos every 4 seconds
+  // Auto-rotate runner photos every 4.5 seconds
   useEffect(() => {
     if (activeMediaTab !== 'photos') return;
     const photoTimer = setInterval(() => {
@@ -79,13 +74,8 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     return () => clearInterval(photoTimer);
   }, [activeMediaTab, runnerPhotos.length]);
 
-  // Compute total registered and total slots
-  const totalRegistered = event.distances.reduce((sum, d) => sum + (d.registeredCount || 0), 0);
-  const totalSlots = event.totalSlots || 4500;
-  const slotPercentage = Math.min(100, Math.round((totalRegistered / totalSlots) * 100));
-
   return (
-    <div className="relative w-full min-h-[85vh] lg:min-h-[92vh] flex flex-col justify-center items-center text-center px-4 pt-28 pb-16 overflow-hidden bg-gradient-to-b from-slate-100 via-white to-slate-50">
+    <div className="relative w-full min-h-[75vh] flex flex-col justify-center items-center text-center px-4 pt-28 pb-12 overflow-hidden bg-gradient-to-b from-slate-100 via-white to-slate-50">
       
       {/* Background Graphic Effects & Speed lines */}
       <div className="absolute inset-0 bg-speed-lines pointer-events-none opacity-60" />
@@ -96,18 +86,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       {/* Hero Content */}
       <div className="relative z-10 max-w-5xl mx-auto flex flex-col items-center">
         
-        {/* Top Badges */}
-        <div className="flex flex-wrap items-center justify-center gap-2 mb-4 animate-in fade-in slide-in-from-top-4 duration-500">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-red-50 border border-red-200 text-red-600 text-xs font-black uppercase tracking-widest shadow-xs">
-            <Flame className="w-3.5 h-3.5 fill-red-600 text-red-600" />
-            Официальный старт сезона 2026
-          </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200 text-slate-700 text-xs font-semibold shadow-xs">
-            <ShieldCheck className="w-3.5 h-3.5 text-red-600" />
-            Сертификация AIMS & World Athletics
-          </div>
-        </div>
-
         {/* Brand Event Title */}
         <div className="mb-4">
           <h1 className="text-3xl sm:text-5xl md:text-6xl font-black font-bebas text-slate-900 tracking-tight leading-[0.98]">
@@ -118,7 +96,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           </p>
         </div>
 
-        {/* RUNNER MEDIA SHOWCASE (Replaces old text slogan) */}
+        {/* RUNNER MEDIA SHOWCASE */}
         <div className="w-full max-w-4xl mb-6 relative">
           
           {/* Media Switcher Tabs */}
@@ -190,7 +168,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               </>
             ) : (
               <div className="relative w-full h-full">
-                {/* Runner video stream with fallback poster */}
                 <video
                   autoPlay
                   loop
@@ -240,7 +217,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         </div>
 
         {/* Live Countdown Timer (Red & White Palette) */}
-        <div className="mb-6">
+        <div>
           <div className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2.5">
             ДО ВЫСТРЕЛА СТАРТОВОГО ПИСТОЛЕТА ОСТАЛОСЬ:
           </div>
@@ -272,80 +249,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           </div>
         </div>
 
-        {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-md mb-6">
-          <button
-            onClick={onRegisterClick}
-            className="w-full sm:w-auto flex-1 px-8 py-4 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white font-black text-sm uppercase tracking-wider hover:from-red-500 hover:to-rose-500 transition-all duration-300 flex items-center justify-center gap-2 shadow-xl shadow-red-600/25 cursor-pointer hover:scale-105"
-          >
-            <Sparkles className="w-4 h-4 fill-white" />
-            Зарегистрироваться на забег
-            <ArrowRight className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={onExploreMapClick}
-            className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold text-sm tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-          >
-            <Navigation className="w-4 h-4 text-red-600" />
-            Смотреть трассу
-          </button>
-        </div>
-
-        {/* Live Slot Capacity Progress */}
-        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1.5">
-            <span>Регистрация слотов:</span>
-            <span className="text-red-600 font-bold">
-              {totalRegistered} из {totalSlots} ({slotPercentage}%)
-            </span>
-          </div>
-          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-            <div
-              className="bg-gradient-to-r from-red-600 to-rose-500 h-full rounded-full transition-all duration-500"
-              style={{ width: `${slotPercentage}%` }}
-            />
-          </div>
-          <div className="text-[11px] text-slate-500 text-center mt-1.5">
-            Осталось {totalSlots - totalRegistered} мест • Регистрация закроется при исчерпании лимита
-          </div>
-        </div>
-
-      </div>
-
-      {/* Bottom HUD Metrics Banner */}
-      <div className="relative z-10 w-full max-w-6xl mx-auto mt-10 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-left">
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-          <div className="text-red-600 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 mb-1">
-            <ShieldCheck className="w-4 h-4 text-red-600" /> Дистанции
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-bebas text-slate-900">42.2K / 21.1K / 10K</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Включая 5K Fun Run и 3K Kids</div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-          <div className="text-amber-600 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 mb-1">
-            <Trophy className="w-4 h-4 text-amber-500" /> Призовой фонд
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-bebas text-slate-900">15 000 000 ₸</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Награды в абсолюте и категориях</div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-          <div className="text-rose-600 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 mb-1">
-            <Users className="w-4 h-4 text-rose-500" /> Участники
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-bebas text-slate-900">4 500+ АТЛЕТОВ</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Лимит участников соревнований</div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-          <div className="text-slate-700 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 mb-1">
-            <Globe2 className="w-4 h-4 text-red-600" /> География
-          </div>
-          <div className="text-2xl sm:text-3xl font-black font-bebas text-slate-900">45+ СТРАН МИРА</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Международный статус старта</div>
-        </div>
       </div>
 
     </div>
