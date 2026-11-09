@@ -322,15 +322,18 @@ class MarathonStorage {
     return [...this.participants];
   }
 
-  public registerParticipant(data: Omit<Participant, 'id' | 'bibNumber' | 'registrationDate' | 'checkedInExpo'>): Participant {
-    // Generate next bib number based on distance
+  public getNextBibNumber(eventId: string, distanceId: string): string {
+    const event = this.getEventById(eventId);
+    const distance = event?.distances.find(d => d.id === distanceId);
+    const prefix = distance ? Math.round(distance.distanceKm).toString().padStart(2, '0') : '99';
+    const count = this.participants.filter(p => p.distanceId === distanceId).length + 1;
+    return `${prefix}-${(count + 100).toString()}`;
+  }
+
+  public registerParticipant(data: Omit<Participant, 'id' | 'bibNumber' | 'registrationDate' | 'checkedInExpo'> & { bibNumber?: string }): Participant {
     const event = this.getEventById(data.eventId);
     const distance = event?.distances.find(d => d.id === data.distanceId);
-    const prefix = distance ? Math.round(distance.distanceKm).toString().padStart(2, '0') : '99';
-    
-    // Count existing in distance
-    const count = this.participants.filter(p => p.distanceId === data.distanceId).length + 1;
-    const bibNumber = `${prefix}-${(count + 100).toString()}`;
+    const bibNumber = data.bibNumber || this.getNextBibNumber(data.eventId, data.distanceId);
 
     const newParticipant: Participant = {
       ...data,

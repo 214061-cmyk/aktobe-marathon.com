@@ -89,6 +89,7 @@ export interface EventOptionsConfig {
   enablePastaParty: boolean;
   pastaPartyPrice: number;
   enableCharity: boolean;
+  enableStartClusters?: boolean; // Control start cluster & elite pace selection in registration
 }
 
 export interface MarathonEvent {

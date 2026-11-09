@@ -8,7 +8,8 @@ export const DEFAULT_OPTIONS_CONFIG: EventOptionsConfig = {
   medalEngravingPrice: 2000,
   enablePastaParty: true,
   pastaPartyPrice: 3500,
-  enableCharity: true
+  enableCharity: true,
+  enableStartClusters: false
 };
 
 // Aktobe center around Central Park / Abilkhayyr Khan Ave: [50.2877, 57.1856]

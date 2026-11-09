@@ -35,12 +35,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [gender, setGender] = useState<'male' | 'female'>('male');
-  const [birthDate, setBirthDate] = useState('2000-05-15');
+  const [birthDate, setBirthDate] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('+7 705 ');
+  const [phone, setPhone] = useState('');
   const [city, setCity] = useState('Актобе');
   const [club, setClub] = useState('');
   const [emergencyContact, setEmergencyContact] = useState('');
+  const [step2Submitted, setStep2Submitted] = useState(false);
+  const [assignedBib, setAssignedBib] = useState<string>('');
 
   // Step 3
   const [wantsTShirt, setWantsTShirt] = useState<boolean>(true);
@@ -109,18 +111,30 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     medalEngravingPrice: 2000,
     enablePastaParty: true,
     pastaPartyPrice: 3500,
-    enableCharity: true
+    enableCharity: true,
+    enableStartClusters: false
   };
 
   // Age calculation and validation against distance requirement
-  const runnerAge = calculateAge(birthDate, event.date);
-  const isUnderAge = runnerAge < (selectedDistance?.minAge || 0);
+  const hasBirthDate = Boolean(birthDate);
+  const runnerAge = hasBirthDate ? calculateAge(birthDate, event.date) : 0;
+  const isUnderAge = hasBirthDate && runnerAge < (selectedDistance?.minAge || 0);
   const matchedCategory = determineAgeCategory(runnerAge, selectedDistance?.ageCategories) || {
     id: 'default-cat',
     name: 'Абсолют',
     minAge: 18,
     maxAge: 99
   };
+
+  // Field validation rules
+  const isFirstNameValid = firstName.trim().length >= 2;
+  const isLastNameValid = lastName.trim().length >= 2;
+  const isBirthDateValid = hasBirthDate && !isUnderAge;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  const isEmailValid = emailRegex.test(email.trim());
+  const digitsOnly = phone.replace(/\D/g, '');
+  const isPhoneValid = digitsOnly.length >= 10;
+  const isStep2Valid = isFirstNameValid && isLastNameValid && isBirthDateValid && isEmailValid && isPhoneValid;
 
   // Price Calculation respecting organizer configuration
   const basePrice = selectedDistance?.price || 0;
@@ -131,20 +145,18 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
 
   const handleNext = () => {
     if (currentStep === 2) {
-      if (!firstName.trim() || !lastName.trim() || !email.trim() || !phone.trim() || !birthDate) {
-        alert('Пожалуйста, заполните обязательные поля: Имя, Фамилия, Дата рождения, Email и Телефон');
-        return;
-      }
-
-      if (isUnderAge) {
-        alert(
-          `Внимание: На дистанцию "${selectedDistance.name}" допускаются участники строго от ${selectedDistance.minAge} лет!\n\n` +
-          `Ваш расчетный возраст на день соревнований: ${runnerAge} лет.\n` +
-          `Пожалуйста, вернитесь на Шаг 1 и выберите разрешенную дистанцию.`
-        );
+      setStep2Submitted(true);
+      if (!isStep2Valid) {
         return;
       }
     }
+
+    if (currentStep === 3) {
+      // Step 4: generate exact official bib number from storage
+      const nextBib = marathonStorage.getNextBibNumber(event.id, selectedDistance.id);
+      setAssignedBib(nextBib);
+    }
+
     setCurrentStep(prev => prev + 1);
   };
 
@@ -156,11 +168,14 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     setIsProcessing(true);
 
     setTimeout(() => {
+      const bibToAssign = assignedBib || marathonStorage.getNextBibNumber(event.id, selectedDistance.id);
+
       // Register in Storage with calculated age and ageCategory
       const newRunner = marathonStorage.registerParticipant({
         eventId: event.id,
         distanceId: selectedDistance.id,
         distanceName: selectedDistance.name,
+        bibNumber: bibToAssign,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         gender,
@@ -169,7 +184,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         ageCategory: matchedCategory.name,
         email: email.trim(),
         phone: phone.trim(),
-        city: city.trim(),
+        city: city.trim() || 'Актобе',
         country: 'Казахстан',
         club: club.trim() || undefined,
         wantsTShirt: optionsConfig.enableTShirt ? wantsTShirt : false,
@@ -323,22 +338,24 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                 })}
               </div>
 
-              {/* Cluster Choice */}
-              <div className="pt-2">
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-                  Стартовый кластер (по ожидаемому темпу)
-                </label>
-                <select
-                  value={cluster}
-                  onChange={(e) => setCluster(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-red-600 font-medium"
-                >
-                  <option>Кластер A (Элита, целевой темп быстрее 4:15 мин/км)</option>
-                  <option>Кластер B (Опытные, темп 4:30 - 5:15 мин/км)</option>
-                  <option>Кластер C (Любители, темп 5:30 - 6:30 мин/км)</option>
-                  <option>Кластер D (Начинающие / Финишеры, темп спокойный)</option>
-                </select>
-              </div>
+              {/* Cluster Choice (controlled by admin in event parameters) */}
+              {optionsConfig.enableStartClusters && (
+                <div className="pt-2">
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Стартовый кластер (по ожидаемому темпу)
+                  </label>
+                  <select
+                    value={cluster}
+                    onChange={(e) => setCluster(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-red-600 font-medium"
+                  >
+                    <option>Кластер A (Элита, целевой темп быстрее 4:15 мин/км)</option>
+                    <option>Кластер B (Опытные, темп 4:30 - 5:15 мин/км)</option>
+                    <option>Кластер C (Любители, темп 5:30 - 6:30 мин/км)</option>
+                    <option>Кластер D (Начинающие / Финишеры, темп спокойный)</option>
+                  </select>
+                </div>
+              )}
             </div>
           )}
 
@@ -367,7 +384,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
               )}
 
               {/* Automatically Determined Age Category Preview */}
-              {!isUnderAge && (
+              {hasBirthDate && !isUnderAge && (
                 <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
                     <UserCheck className="w-4 h-4 text-emerald-600" />
@@ -382,28 +399,59 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                 </div>
               )}
 
+              {/* Required Fields Summary Alert */}
+              {step2Submitted && !isStep2Valid && (
+                <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+                  <span>Пожалуйста, заполните все обязательные поля со звездочкой (*) для продолжения</span>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Имя *</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Имя *
+                  </label>
                   <input
                     type="text"
                     required
                     placeholder="Алибек"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-red-600 font-medium"
+                    className={`w-full rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none font-medium border ${
+                      step2Submitted && !isFirstNameValid
+                        ? 'border-red-500 bg-red-50/40'
+                        : 'border-slate-300 bg-slate-50 focus:border-red-600'
+                    }`}
                   />
+                  {step2Submitted && !isFirstNameValid && (
+                    <span className="text-[10px] text-red-600 font-bold mt-1 block">
+                      Обязательное поле (минимум 2 буквы)
+                    </span>
+                  )}
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Фамилия *</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Фамилия *
+                  </label>
                   <input
                     type="text"
                     required
                     placeholder="Жумагулов"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-red-600 font-medium"
+                    className={`w-full rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none font-medium border ${
+                      step2Submitted && !isLastNameValid
+                        ? 'border-red-500 bg-red-50/40'
+                        : 'border-slate-300 bg-slate-50 focus:border-red-600'
+                    }`}
                   />
+                  {step2Submitted && !isLastNameValid && (
+                    <span className="text-[10px] text-red-600 font-bold mt-1 block">
+                      Обязательное поле (минимум 2 буквы)
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -445,33 +493,70 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     required
                     value={birthDate}
                     onChange={(e) => setBirthDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:border-red-600 font-medium"
+                    className={`w-full rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none font-medium border ${
+                      step2Submitted && !isBirthDateValid
+                        ? 'border-red-500 bg-red-50/40'
+                        : 'border-slate-300 bg-slate-50 focus:border-red-600'
+                    }`}
                   />
+                  {step2Submitted && !hasBirthDate && (
+                    <span className="text-[10px] text-red-600 font-bold mt-1 block">
+                      Укажите дату рождения
+                    </span>
+                  )}
+                  {step2Submitted && isUnderAge && (
+                    <span className="text-[10px] text-red-600 font-bold mt-1 block">
+                      Возраст ({runnerAge} лет) меньше лимита ({selectedDistance.minAge}+ лет)
+                    </span>
+                  )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Email для билета *</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Email для билета *
+                  </label>
                   <input
                     type="email"
                     required
                     placeholder="runner@example.kz"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-red-600 font-medium"
+                    className={`w-full rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none font-medium border ${
+                      step2Submitted && !isEmailValid
+                        ? 'border-red-500 bg-red-50/40'
+                        : 'border-slate-300 bg-slate-50 focus:border-red-600'
+                    }`}
                   />
+                  {step2Submitted && !isEmailValid && (
+                    <span className="text-[10px] text-red-600 font-bold mt-1 block">
+                      {email.trim() ? 'Укажите корректный email (например, name@mail.kz)' : 'Обязательное поле'}
+                    </span>
+                  )}
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Мобильный телефон *</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Мобильный телефон *
+                  </label>
                   <input
                     type="tel"
                     required
-                    placeholder="+7 705 123 45 67"
+                    placeholder="+7 (705) 123-45-67"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-red-600 font-medium"
+                    className={`w-full rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none font-medium border ${
+                      step2Submitted && !isPhoneValid
+                        ? 'border-red-500 bg-red-50/40'
+                        : 'border-slate-300 bg-slate-50 focus:border-red-600'
+                    }`}
                   />
+                  {step2Submitted && !isPhoneValid && (
+                    <span className="text-[10px] text-red-600 font-bold mt-1 block">
+                      Укажите телефон с кодом оператора (минимум 10 цифр)
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -672,13 +757,13 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
               {/* Virtual Bib Preview */}
               <div className="flex justify-center py-2">
                 <DigitalBib
-                  bibNumber={`${Math.round(selectedDistance.distanceKm)}-${Math.floor(100 + Math.random() * 899)}`}
-                  runnerName={`${firstName || 'АТЛЕТ'} ${lastName || 'МАРАФОНЕЦ'}`}
+                  bibNumber={assignedBib || marathonStorage.getNextBibNumber(event.id, selectedDistance.id)}
+                  runnerName={`${lastName || 'ФАМИЛИЯ'} ${firstName || 'ИМЯ'}`}
                   distanceName={selectedDistance.name}
                   hexColor={selectedDistance.hexColor || '#dc2626'}
                   eventName={event.title}
                   city={event.city}
-                  wave={cluster.split('(')[0].trim()}
+                  wave={optionsConfig.enableStartClusters ? cluster.split('(')[0].trim() : 'Общий старт'}
                 />
               </div>
 
@@ -692,13 +777,15 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                   <span>Возрастная категория:</span>
                   <b className="text-red-600">{matchedCategory.name}</b>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Стартовый кластер:</span>
-                  <b className="text-slate-900">{cluster.split('(')[0]}</b>
-                </div>
+                {optionsConfig.enableStartClusters && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Стартовый кластер:</span>
+                    <b className="text-slate-900">{cluster.split('(')[0]}</b>
+                  </div>
+                )}
                 <div className="flex justify-between text-slate-600">
                   <span>Время старта волны:</span>
-                  <b className="text-slate-900">{selectedDistance.startTime} (17 мая 2026)</b>
+                  <b className="text-slate-900">{selectedDistance.startTime}</b>
                 </div>
               </div>
             </div>
@@ -825,7 +912,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                   hexColor={selectedDistance.hexColor || '#dc2626'}
                   eventName={event.title}
                   city={event.city}
-                  wave={cluster.split('(')[0].trim()}
+                  wave={optionsConfig.enableStartClusters ? cluster.split('(')[0].trim() : 'Общий старт'}
                 />
               </div>
 

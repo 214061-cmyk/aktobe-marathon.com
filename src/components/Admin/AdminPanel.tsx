@@ -129,7 +129,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       medalEngravingPrice: 2000,
       enablePastaParty: true,
       pastaPartyPrice: 3500,
-      enableCharity: true
+      enableCharity: true,
+      enableStartClusters: false
     }
   });
 
@@ -198,14 +199,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         prizePool: curr.prizePool || '',
         totalSlots: curr.totalSlots || 4500,
         status: curr.status || 'registration_open',
-        optionsConfig: curr.optionsConfig || {
+        optionsConfig: curr.optionsConfig ? {
+          ...curr.optionsConfig,
+          enableStartClusters: Boolean(curr.optionsConfig.enableStartClusters)
+        } : {
           enableTShirt: true,
           tShirtPrice: 0,
           enableMedalEngraving: true,
           medalEngravingPrice: 2000,
           enablePastaParty: true,
           pastaPartyPrice: 3500,
-          enableCharity: true
+          enableCharity: true,
+          enableStartClusters: false
         }
       });
       if (curr.distances[0]) {
@@ -2065,6 +2070,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         {eventForm.optionsConfig.enableCharity
                           ? 'Опция активна: бегуны могут пожертвовать 1 000, 2 500 или 5 000 ₸ в фонд.'
                           : 'Опция отключена: сбор взносов скрыт в форме регистрации.'}
+                      </p>
+                    </div>
+
+                    {/* Start Clusters / Elite Selection Toggle */}
+                    <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-cyan-400" />
+                          <span className="font-bold text-white text-xs">Стартовые кластеры / Элита (выбор темпа)</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(eventForm.optionsConfig.enableStartClusters)}
+                          onChange={e => setEventForm({
+                            ...eventForm,
+                            optionsConfig: {
+                              ...eventForm.optionsConfig,
+                              enableStartClusters: e.target.checked
+                            }
+                          })}
+                          className="w-5 h-5 rounded text-lime-500 focus:ring-0 bg-zinc-800 border-zinc-700 cursor-pointer accent-lime-400"
+                        />
+                      </div>
+                      <p className="text-[11px] text-zinc-400">
+                        {eventForm.optionsConfig.enableStartClusters
+                          ? 'Опция активна: на Шаге 1 регистрации отображается выбор стартового кластера (Кластер А Элита, B, C, D).'
+                          : 'Опция отключена: выбор стартового кластера/элиты скрыт при регистрации.'}
                       </p>
                     </div>
 
