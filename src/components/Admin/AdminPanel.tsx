@@ -58,6 +58,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     mapImageUrl?: string;
     points: RoutePoint[];
     ageCategories: AgeCategory[];
+    bibPrefix?: string;
+    bibStartNumber?: number;
+    bibEndNumber?: number;
+    bibDigitsPadding?: number;
   }>({
     name: '',
     tag: '',
@@ -72,7 +76,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     badgeColor: 'lime',
     mapImageUrl: '',
     points: [],
-    ageCategories: []
+    ageCategories: [],
+    bibPrefix: '',
+    bibStartNumber: 1,
+    bibEndNumber: 1000,
+    bibDigitsPadding: 3
   });
 
   // Category addition sub-form
@@ -129,7 +137,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       medalEngravingPrice: 2000,
       enablePastaParty: true,
       pastaPartyPrice: 3500,
-      enableCharity: true
+      enableCharity: true,
+      enableStartClusters: false
     }
   });
 
@@ -198,14 +207,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         prizePool: curr.prizePool || '',
         totalSlots: curr.totalSlots || 4500,
         status: curr.status || 'registration_open',
-        optionsConfig: curr.optionsConfig || {
+        optionsConfig: curr.optionsConfig ? {
+          ...curr.optionsConfig,
+          enableStartClusters: Boolean(curr.optionsConfig.enableStartClusters)
+        } : {
           enableTShirt: true,
           tShirtPrice: 0,
           enableMedalEngraving: true,
           medalEngravingPrice: 2000,
           enablePastaParty: true,
           pastaPartyPrice: 3500,
-          enableCharity: true
+          enableCharity: true,
+          enableStartClusters: false
         }
       });
       if (curr.distances[0]) {
@@ -268,7 +281,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       badgeColor: dist.badgeColor,
       mapImageUrl: dist.mapImageUrl || '',
       points: dist.points ? [...dist.points] : [],
-      ageCategories: dist.ageCategories ? [...dist.ageCategories] : [...DEFAULT_ADULT_CATEGORIES]
+      ageCategories: dist.ageCategories ? [...dist.ageCategories] : [...DEFAULT_ADULT_CATEGORIES],
+      bibPrefix: dist.bibPrefix ?? Math.round(dist.distanceKm).toString().padStart(2, '0'),
+      bibStartNumber: dist.bibStartNumber ?? 1,
+      bibEndNumber: dist.bibEndNumber ?? dist.slots,
+      bibDigitsPadding: dist.bibDigitsPadding ?? 3
     });
   };
 
@@ -284,7 +301,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       price: Number(distanceForm.price),
       slots: Number(distanceForm.slots),
       minAge: Number(distanceForm.minAge),
-      distanceKm: Number(distanceForm.distanceKm)
+      distanceKm: Number(distanceForm.distanceKm),
+      bibPrefix: distanceForm.bibPrefix?.trim() || Math.round(distanceForm.distanceKm).toString().padStart(2, '0'),
+      bibStartNumber: Number(distanceForm.bibStartNumber || 1),
+      bibEndNumber: Number(distanceForm.bibEndNumber || distanceForm.slots),
+      bibDigitsPadding: Number(distanceForm.bibDigitsPadding || 3)
     };
 
     marathonStorage.updateDistance(currentEvent.id, updatedDist);
@@ -2063,8 +2084,75 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </div>
                       <p className="text-[11px] text-zinc-400">
                         {eventForm.optionsConfig.enableCharity
-                          ? 'Опция активна: бегуны могут пожертвовать 1 000, 2 500 или 5 000 ₸ в фонд.'
+                          ? 'Опция активна: бегуны могут внести 500, 1000, 2000, 5000 ₸ либо любую произвольную сумму.'
                           : 'Опция отключена: сбор взносов скрыт в форме регистрации.'}
+                      </p>
+                      {eventForm.optionsConfig.enableCharity && (
+                        <div className="space-y-3 pt-3 border-t border-zinc-800">
+                          <div>
+                            <label className="text-zinc-400 font-bold block mb-1 text-[11px]">
+                              Название благотворительного фонда / проекта
+                            </label>
+                            <input
+                              type="text"
+                              value={eventForm.optionsConfig.charityFundName ?? ''}
+                              placeholder="Например: фонд «Бақытты Бала» или Фонд «Аяла»"
+                              onChange={e => setEventForm({
+                                ...eventForm,
+                                optionsConfig: {
+                                  ...eventForm.optionsConfig,
+                                  charityFundName: e.target.value
+                                }
+                              })}
+                              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white focus:border-lime-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-zinc-400 font-bold block mb-1 text-[11px]">
+                              Описание назначения сбора
+                            </label>
+                            <input
+                              type="text"
+                              value={eventForm.optionsConfig.charityDescription ?? ''}
+                              placeholder="Например: Средства пойдут на закупку спортивной формы для детей..."
+                              onChange={e => setEventForm({
+                                ...eventForm,
+                                optionsConfig: {
+                                  ...eventForm.optionsConfig,
+                                  charityDescription: e.target.value
+                                }
+                              })}
+                              className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs text-white focus:border-lime-400"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Start Clusters / Elite Selection Toggle */}
+                    <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-cyan-400" />
+                          <span className="font-bold text-white text-xs">Стартовые кластеры / Элита (выбор темпа)</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(eventForm.optionsConfig.enableStartClusters)}
+                          onChange={e => setEventForm({
+                            ...eventForm,
+                            optionsConfig: {
+                              ...eventForm.optionsConfig,
+                              enableStartClusters: e.target.checked
+                            }
+                          })}
+                          className="w-5 h-5 rounded text-lime-500 focus:ring-0 bg-zinc-800 border-zinc-700 cursor-pointer accent-lime-400"
+                        />
+                      </div>
+                      <p className="text-[11px] text-zinc-400">
+                        {eventForm.optionsConfig.enableStartClusters
+                          ? 'Опция активна: на Шаге 1 регистрации отображается выбор стартового кластера (Кластер А Элита, B, C, D).'
+                          : 'Опция отключена: выбор стартового кластера/элиты скрыт при регистрации.'}
                       </p>
                     </div>
 
@@ -2634,6 +2722,54 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* BIB Number Range & Format */}
+              <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="font-bold text-white text-xs flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-lime-400" />
+                    Диапазон и нумерация участников (BIB)
+                  </span>
+                  <span className="text-[11px] text-lime-400 font-mono font-bold bg-lime-950/60 px-2.5 py-0.5 rounded-lg border border-lime-800/60 self-start sm:self-auto">
+                    Пример: {(distanceForm.bibPrefix || Math.round(distanceForm.distanceKm).toString().padStart(2, '0'))}-{String(distanceForm.bibStartNumber || 1).padStart(distanceForm.bibDigitsPadding || 3, '0')} ... {(distanceForm.bibPrefix || Math.round(distanceForm.distanceKm).toString().padStart(2, '0'))}-{String(distanceForm.bibEndNumber || distanceForm.slots).padStart(distanceForm.bibDigitsPadding || 3, '0')}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-zinc-400 font-bold block mb-1 text-[11px]">Префикс номера</label>
+                    <input
+                      type="text"
+                      value={distanceForm.bibPrefix ?? ''}
+                      onChange={e => setDistanceForm({ ...distanceForm, bibPrefix: e.target.value })}
+                      placeholder={`По умолчанию: ${Math.round(distanceForm.distanceKm).toString().padStart(2, '0')}`}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:border-lime-400 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-zinc-400 font-bold block mb-1 text-[11px]">Начальный номер (от)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={distanceForm.bibStartNumber ?? 1}
+                      onChange={e => setDistanceForm({ ...distanceForm, bibStartNumber: Number(e.target.value) })}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-lime-400 font-bold focus:border-lime-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-zinc-400 font-bold block mb-1 text-[11px]">Конечный номер (до)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={distanceForm.bibEndNumber ?? distanceForm.slots}
+                      onChange={e => setDistanceForm({ ...distanceForm, bibEndNumber: Number(e.target.value) })}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-lime-400 font-bold focus:border-lime-400"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-zinc-400 leading-relaxed">
+                  Номера участников на дистанции будут присваиваться последовательно: например, <b>{(distanceForm.bibPrefix || Math.round(distanceForm.distanceKm).toString().padStart(2, '0'))}-001</b>, <b>{(distanceForm.bibPrefix || Math.round(distanceForm.distanceKm).toString().padStart(2, '0'))}-002</b> и далее до <b>{(distanceForm.bibPrefix || Math.round(distanceForm.distanceKm).toString().padStart(2, '0'))}-{distanceForm.bibEndNumber || distanceForm.slots}</b>.
+                </p>
               </div>
 
               {/* ROUTE MAP & SERVICE POINTS MANAGEMENT */}

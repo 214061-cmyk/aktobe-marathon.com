@@ -17,6 +17,7 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
   if (!isOpen || !documentKey) return null;
 
   const currentDoc = marathonStorage.getDocument(documentKey);
+  if (!currentDoc) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">

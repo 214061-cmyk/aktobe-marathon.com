@@ -6,17 +6,20 @@ export type PaymentMethod = 'kaspi' | 'card' | 'apple_pay';
 
 export type PaymentStatus = 'paid' | 'pending' | 'refunded';
 
-export type DocumentKey = 'regulation' | 'offer' | 'privacy' | 'medical' | 'transfer';
+export type DocumentKey = string;
 
 export interface LegalDocument {
-  key: DocumentKey;
+  id: string;
+  key?: string;
   title: string;
   subtitle?: string;
   date?: string;
   fileUrl?: string; // Direct link or Data URL for PDF/DOC
   fileName?: string; // Name of uploaded file e.g. "Polozhenie_Aqtobe_2026.pdf"
   fileSize?: string; // e.g. "2.4 MB"
-  contentHtml?: string; // Editable custom text
+  contentHtml?: string; // Optional legacy text
+  updatedAt?: string;
+  order?: number;
 }
 
 export interface AgeCategory {
@@ -53,6 +56,10 @@ export interface Distance {
   routeWaypoints: [number, number][];
   points: RoutePoint[];
   mapImageUrl?: string; // Uploaded custom scheme/map image for this distance
+  bibPrefix?: string; // e.g. "27", "42", "HALF"
+  bibStartNumber?: number; // Starting number e.g. 1
+  bibEndNumber?: number; // Ending range e.g. 300
+  bibDigitsPadding?: number; // e.g. 3 -> "001", "002"
 }
 
 export interface ScheduleItem {
@@ -86,6 +93,9 @@ export interface EventOptionsConfig {
   enablePastaParty: boolean;
   pastaPartyPrice: number;
   enableCharity: boolean;
+  charityFundName?: string; // e.g. "фонд «Бақытты Бала»"
+  charityDescription?: string; // e.g. "Средства пойдут на закупку спортивной формы..."
+  enableStartClusters?: boolean; // Control start cluster & elite pace selection in registration
 }
 
 export interface MarathonEvent {
