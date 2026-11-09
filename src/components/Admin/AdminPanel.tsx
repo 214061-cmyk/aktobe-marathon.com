@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { MarathonEvent, Distance, Participant, AgeCategory, Sponsor, EventOptionsConfig, ScheduleDay, ScheduleItem, RoutePoint } from '../../types/marathon';
+import type { MarathonEvent, Distance, Participant, AgeCategory, Sponsor, EventOptionsConfig, ScheduleDay, ScheduleItem, RoutePoint, DocumentKey } from '../../types/marathon';
+import { DocumentsManager } from './DocumentsManager';
+import { DocumentModal } from '../Legal/DocumentModal';
 import { marathonStorage } from '../../services/marathonStorage';
 import { calculateAge, determineAgeCategory, DEFAULT_ADULT_CATEGORIES, DEFAULT_YOUTH_10K_CATEGORIES, DEFAULT_KIDS_CATEGORIES } from '../../utils/ageUtils';
 import { 
@@ -28,7 +30,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [events, setEvents] = useState<MarathonEvent[]>([]);
   const [currentEvent, setCurrentEvent] = useState<MarathonEvent | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents'>('overview');
+  const [previewDocKey, setPreviewDocKey] = useState<DocumentKey | null>(null);
 
   // Participants Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -1101,6 +1104,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               activeTab === 'expo' ? 'bg-black text-white' : 'bg-zinc-800 text-zinc-300'
             }`}>
               {expoCheckedInCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('documents')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'documents'
+                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <FileText className="w-4 h-4" />
+              Документы и регламенты
+            </div>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+              activeTab === 'documents' ? 'bg-white text-red-600 font-bold' : 'bg-zinc-800 text-zinc-300'
+            }`}>
+              5
             </span>
           </button>
 
@@ -2446,6 +2468,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           )}
 
+          {/* TAB: LEGAL DOCUMENTS & REGULATIONS */}
+          {activeTab === 'documents' && (
+            <DocumentsManager onOpenPreview={(key) => setPreviewDocKey(key)} />
+          )}
+
         </main>
       </div>
 
@@ -3572,6 +3599,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* PREVIEW LEGAL DOCUMENT MODAL */}
+      {previewDocKey && (
+        <DocumentModal
+          isOpen={previewDocKey !== null}
+          onClose={() => setPreviewDocKey(null)}
+          documentKey={previewDocKey}
+        />
       )}
 
     </div>
