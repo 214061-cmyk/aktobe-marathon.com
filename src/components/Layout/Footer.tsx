@@ -1,13 +1,23 @@
-import React from 'react';
-import type { Sponsor } from '../../types/marathon';
-import { Mail, Phone, MapPin, Send, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import type { Sponsor, LegalDocument } from '../../types/marathon';
+import { Mail, Phone, MapPin, Send, FileText, Download, ExternalLink } from 'lucide-react';
+import { marathonStorage } from '../../services/marathonStorage';
 
 interface FooterProps {
   sponsors: Sponsor[];
-  onOpenDocument: (key: 'regulation' | 'offer' | 'privacy' | 'medical' | 'transfer') => void;
+  onOpenDocument?: (key: 'regulation' | 'offer' | 'privacy' | 'medical' | 'transfer') => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({ sponsors, onOpenDocument }) => {
+  const [documents, setDocuments] = useState<LegalDocument[]>(() => marathonStorage.getDocuments());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setDocuments(marathonStorage.getDocuments());
+    };
+    window.addEventListener('marathon-storage-update', handleUpdate);
+    return () => window.removeEventListener('marathon-storage-update', handleUpdate);
+  }, []);
   return (
     <footer className="w-full bg-slate-900 border-t border-slate-800 text-slate-400 text-xs">
       
@@ -122,56 +132,55 @@ export const Footer: React.FC<FooterProps> = ({ sponsors, onOpenDocument }) => {
               Документы соревнования
             </h4>
             <ul className="space-y-2.5">
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onOpenDocument('regulation')}
-                  className="text-left text-slate-300 hover:text-red-400 transition-colors cursor-pointer flex items-center gap-1.5 group"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 group-hover:scale-125 transition-transform" />
-                  Официальное Положение забега (PDF)
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onOpenDocument('offer')}
-                  className="text-left text-slate-300 hover:text-red-400 transition-colors cursor-pointer flex items-center gap-1.5 group"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 group-hover:bg-red-500 group-hover:scale-125 transition-all" />
-                  Договор публичной оферты
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onOpenDocument('privacy')}
-                  className="text-left text-slate-300 hover:text-red-400 transition-colors cursor-pointer flex items-center gap-1.5 group"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 group-hover:bg-red-500 group-hover:scale-125 transition-all" />
-                  Политика конфиденциальности
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onOpenDocument('medical')}
-                  className="text-left text-slate-300 hover:text-red-400 transition-colors cursor-pointer flex items-center gap-1.5 group"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 group-hover:bg-red-500 group-hover:scale-125 transition-all" />
-                  Медицинские требования и справки
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onOpenDocument('transfer')}
-                  className="text-left text-slate-300 hover:text-red-400 transition-colors cursor-pointer flex items-center gap-1.5 group"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 group-hover:bg-red-500 group-hover:scale-125 transition-all" />
-                  Правила передачи стартового слота
-                </button>
-              </li>
+              {documents.map((doc) => {
+                if (doc.fileUrl) {
+                  return (
+                    <li key={doc.id}>
+                      <a
+                        href={doc.fileUrl}
+                        download={doc.fileName || undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-left text-slate-300 hover:text-red-400 transition-colors flex items-center justify-between group text-xs cursor-pointer py-0.5"
+                        title={`Скачать / открыть ${doc.title}`}
+                      >
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 group-hover:scale-125 transition-transform shrink-0" />
+                          <span className="truncate">{doc.title}</span>
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-1.5 group-hover:text-red-400 flex items-center gap-0.5">
+                          {doc.fileSize ? `(${doc.fileSize})` : ''} ↗
+                        </span>
+                      </a>
+                    </li>
+                  );
+                }
+
+                return (
+                  <li key={doc.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onOpenDocument && doc.key) {
+                          onOpenDocument(doc.key as any);
+                        } else {
+                          alert(`Файл документа «${doc.title}» в данный момент подготавливается оргкомитетом и скоро будет загружен.`);
+                        }
+                      }}
+                      className="text-left text-slate-400 hover:text-slate-300 transition-colors flex items-center justify-between group text-xs cursor-pointer w-full py-0.5"
+                      title="Документ на утверждении"
+                    >
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-600 group-hover:bg-slate-400 transition-all shrink-0" />
+                        <span className="truncate">{doc.title}</span>
+                      </span>
+                      <span className="text-[9px] text-slate-600 shrink-0 ml-1.5 font-sans">
+                        (на утверждении)
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 

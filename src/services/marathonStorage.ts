@@ -122,7 +122,7 @@ class MarathonStorage {
   private events: MarathonEvent[] = [];
   private participants: Participant[] = [];
   private results: RaceResult[] = [];
-  private documents: Record<DocumentKey, LegalDocument> = INITIAL_LEGAL_DOCUMENTS;
+  private documents: LegalDocument[] = INITIAL_LEGAL_DOCUMENTS;
   private isSyncing = false;
 
   constructor() {
@@ -141,12 +141,27 @@ class MarathonStorage {
       this.results = storedRes ? JSON.parse(storedRes) : INITIAL_RESULTS;
 
       const storedDocs = localStorage.getItem(STORAGE_KEY_DOCUMENTS);
-      this.documents = storedDocs ? { ...INITIAL_LEGAL_DOCUMENTS, ...JSON.parse(storedDocs) } : INITIAL_LEGAL_DOCUMENTS;
+      if (storedDocs) {
+        try {
+          const parsed = JSON.parse(storedDocs);
+          if (Array.isArray(parsed)) {
+            this.documents = parsed;
+          } else if (typeof parsed === 'object' && parsed !== null) {
+            this.documents = Object.values(parsed);
+          } else {
+            this.documents = [...INITIAL_LEGAL_DOCUMENTS];
+          }
+        } catch {
+          this.documents = [...INITIAL_LEGAL_DOCUMENTS];
+        }
+      } else {
+        this.documents = [...INITIAL_LEGAL_DOCUMENTS];
+      }
     } catch {
       this.events = INITIAL_EVENTS;
       this.participants = INITIAL_PARTICIPANTS;
       this.results = INITIAL_RESULTS;
-      this.documents = INITIAL_LEGAL_DOCUMENTS;
+      this.documents = [...INITIAL_LEGAL_DOCUMENTS];
     }
 
     // If Supabase SQL is configured, sync in background
@@ -230,18 +245,33 @@ class MarathonStorage {
   }
 
   // --- LEGAL DOCUMENTS ---
-  public getDocuments(): Record<DocumentKey, LegalDocument> {
-    return { ...this.documents };
+  public getDocuments(): LegalDocument[] {
+    return [...this.documents];
   }
 
-  public getDocument(key: DocumentKey): LegalDocument {
-    return this.documents[key] || INITIAL_LEGAL_DOCUMENTS[key];
+  public getDocument(idOrKey: string): LegalDocument | undefined {
+    return this.documents.find(d => d.id === idOrKey || d.key === idOrKey);
   }
 
   public saveDocument(doc: LegalDocument): LegalDocument {
-    this.documents[doc.key] = doc;
+    const idx = this.documents.findIndex(d => d.id === doc.id || (doc.key && d.key === doc.key));
+    if (idx >= 0) {
+      this.documents[idx] = { ...this.documents[idx], ...doc };
+    } else {
+      this.documents.push(doc);
+    }
     this.persist();
     return doc;
+  }
+
+  public deleteDocument(idOrKey: string): void {
+    this.documents = this.documents.filter(d => d.id !== idOrKey && d.key !== idOrKey);
+    this.persist();
+  }
+
+  public reorderDocuments(docs: LegalDocument[]): void {
+    this.documents = [...docs];
+    this.persist();
   }
 
   // --- EVENTS ---
