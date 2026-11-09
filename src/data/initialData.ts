@@ -9,6 +9,8 @@ export const DEFAULT_OPTIONS_CONFIG: EventOptionsConfig = {
   enablePastaParty: true,
   pastaPartyPrice: 3500,
   enableCharity: true,
+  charityFundName: 'фонд «Бақытты Бала»',
+  charityDescription: 'Средства пойдут на закупку спортивной формы для детей из интернатов Актюбинской области',
   enableStartClusters: false
 };
 

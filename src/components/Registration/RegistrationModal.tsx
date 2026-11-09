@@ -50,6 +50,8 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [medalEngraving, setMedalEngraving] = useState(false);
   const [pastaParty, setPastaParty] = useState(false);
   const [charityContribution, setCharityContribution] = useState<number>(0);
+  const [isCustomCharity, setIsCustomCharity] = useState(false);
+  const [customCharityInput, setCustomCharityInput] = useState('');
 
   // Step 5
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kaspi');
@@ -708,35 +710,88 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
 
               {/* Charity contribution option */}
               {optionsConfig.enableCharity && (
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                      <Heart className="w-4 h-4 text-rose-500" />
-                      Благотворительный взнос в фонд «Бақытты Бала»
+                      <Heart className="w-4 h-4 text-rose-500 shrink-0" />
+                      <span>Благотворительный взнос в {optionsConfig.charityFundName || 'фонд «Бақытты Бала»'}</span>
                     </div>
-                    <span className="text-xs font-bold text-rose-600">
+                    <span className="text-xs font-bold text-rose-600 shrink-0">
                       {charityContribution > 0 ? `+${charityContribution.toLocaleString('ru-RU')} ₸` : 'По желанию'}
                     </span>
                   </div>
+
                   <div className="text-xs text-slate-500">
-                    Средства пойдут на закупку спортивной формы для детей из интернатов Актюбинской области
+                    {optionsConfig.charityDescription || 'Средства пойдут на закупку спортивной формы для детей из интернатов Актюбинской области'}
                   </div>
-                  <div className="flex gap-2 pt-1">
-                    {[0, 1000, 2500, 5000].map(val => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => setCharityContribution(val)}
-                        className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          charityContribution === val
-                            ? 'bg-rose-600 text-white shadow-xs'
-                            : 'bg-white text-slate-700 border border-slate-300'
+
+                  {/* Preset amounts: 0, 500, 1000, 2000, 5000 */}
+                  <div className="grid grid-cols-5 gap-1.5 pt-1">
+                    {[
+                      { val: 0, label: 'Без взноса' },
+                      { val: 500, label: '+500 ₸' },
+                      { val: 1000, label: '+1 000 ₸' },
+                      { val: 2000, label: '+2 000 ₸' },
+                      { val: 5000, label: '+5 000 ₸' },
+                    ].map(item => {
+                      const isSelected = !isCustomCharity && charityContribution === item.val;
+                      return (
+                        <button
+                          key={item.val}
+                          type="button"
+                          onClick={() => {
+                            setIsCustomCharity(false);
+                            setCustomCharityInput('');
+                            setCharityContribution(item.val);
+                          }}
+                          className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
+                            isSelected
+                              ? 'bg-rose-600 text-white shadow-xs'
+                              : 'bg-white text-slate-700 border border-slate-300 hover:border-slate-400'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Last row: Arbitrary custom amount */}
+                  <div className="pt-2 border-t border-slate-200">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Или укажите свою произвольную сумму взноса:
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Введите любую сумму (например: 3000, 10000...)"
+                        value={isCustomCharity ? customCharityInput : ''}
+                        onChange={e => {
+                          const raw = e.target.value;
+                          setCustomCharityInput(raw);
+                          setIsCustomCharity(true);
+                          const parsed = raw === '' ? 0 : Math.max(0, parseInt(raw, 10) || 0);
+                          setCharityContribution(parsed);
+                        }}
+                        onFocus={() => {
+                          if (!isCustomCharity) {
+                            setIsCustomCharity(true);
+                            setCharityContribution(0);
+                          }
+                        }}
+                        className={`w-full rounded-xl pl-3.5 pr-8 py-2 text-xs font-bold text-slate-900 focus:outline-none transition-colors border ${
+                          isCustomCharity && charityContribution > 0
+                            ? 'border-rose-500 bg-rose-50/20'
+                            : 'border-slate-300 bg-white focus:border-rose-500'
                         }`}
-                      >
-                        {val === 0 ? 'Без взноса' : `+${val} ₸`}
-                      </button>
-                    ))}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
+                        ₸
+                      </span>
+                    </div>
                   </div>
+
                 </div>
               )}
             </div>

@@ -325,9 +325,25 @@ class MarathonStorage {
   public getNextBibNumber(eventId: string, distanceId: string): string {
     const event = this.getEventById(eventId);
     const distance = event?.distances.find(d => d.id === distanceId);
-    const prefix = distance ? Math.round(distance.distanceKm).toString().padStart(2, '0') : '99';
-    const count = this.participants.filter(p => p.distanceId === distanceId).length + 1;
-    return `${prefix}-${(count + 100).toString()}`;
+    
+    // Custom prefix or formatted kilometers (e.g. 27, 42)
+    const prefix = distance?.bibPrefix?.trim() || 
+      (distance ? Math.round(distance.distanceKm).toString().padStart(2, '0') : '99');
+
+    // Starting number configured by admin (default 1)
+    const startNum = (distance?.bibStartNumber !== undefined && distance.bibStartNumber > 0)
+      ? distance.bibStartNumber
+      : 1;
+
+    // Existing registered participants on this distance
+    const count = this.participants.filter(p => p.distanceId === distanceId).length;
+    const currentNum = startNum + count;
+
+    // Format with leading zeros (e.g. 3 digits: 001, 002, 300)
+    const padLength = distance?.bibDigitsPadding || 3;
+    const formattedNum = currentNum.toString().padStart(padLength, '0');
+
+    return `${prefix}-${formattedNum}`;
   }
 
   public registerParticipant(data: Omit<Participant, 'id' | 'bibNumber' | 'registrationDate' | 'checkedInExpo'> & { bibNumber?: string }): Participant {
