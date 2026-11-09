@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Get Supabase credentials from environment variables (e.g. from .env.local or Vercel Environment Variables)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Get Supabase credentials from environment variables (e.g. from .env / .env.local or Vercel Environment Variables)
+const rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+const supabaseUrl = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
