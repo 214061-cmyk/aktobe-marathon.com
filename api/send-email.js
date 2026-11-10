@@ -1,5 +1,22 @@
 import nodemailer from 'nodemailer';
 
+function htmlToPlainText(html) {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*[\/]?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n\s*\n\s*\n/g, '\n\n')
+    .trim();
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed, use POST' });
@@ -143,6 +160,7 @@ export default async function handler(req, res) {
       for (const rec of recipients) {
         const personalizedHtml = html.replace(/\{NAME\}/g, rec.name || 'Атлет');
         const personalizedSubject = subject.replace(/\{NAME\}/g, rec.name || 'Атлет');
+        const plainText = htmlToPlainText(personalizedHtml);
 
         try {
           const resp = await fetch('https://api.resend.com/emails', {
@@ -155,7 +173,12 @@ export default async function handler(req, res) {
               from: fromHeader,
               to: [rec.email],
               subject: personalizedSubject,
-              html: personalizedHtml
+              html: personalizedHtml,
+              text: plainText,
+              headers: {
+                'List-Unsubscribe': `<mailto:${fromEmail}?subject=unsubscribe>`,
+                'Precedence': 'bulk'
+              }
             })
           });
 
@@ -229,13 +252,20 @@ export default async function handler(req, res) {
       for (const rec of recipients) {
         const personalizedHtml = html.replace(/\{NAME\}/g, rec.name || 'Атлет');
         const personalizedSubject = subject.replace(/\{NAME\}/g, rec.name || 'Атлет');
+        const plainText = htmlToPlainText(personalizedHtml);
 
         try {
           await transporter.sendMail({
             from: fromHeader,
             to: rec.email,
             subject: personalizedSubject,
-            html: personalizedHtml
+            html: personalizedHtml,
+            text: plainText,
+            headers: {
+              'List-Unsubscribe': `<mailto:${fromEmail}?subject=unsubscribe>`,
+              'Precedence': 'bulk',
+              'X-Mailer': 'AktobeMarathonMailer/2.0'
+            }
           });
           sentCount++;
         } catch (err) {
