@@ -25,14 +25,19 @@ export function App() {
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const [selectedDistanceId, setSelectedDistanceId] = useState<string | undefined>();
   const [activeDocumentKey, setActiveDocumentKey] = useState<'regulation' | 'offer' | 'privacy' | 'medical' | 'transfer' | null>(null);
+  const [resultsNoticeOpen, setResultsNoticeOpen] = useState(false);
 
   const handleOpenResults = () => {
-    const url = activeEvent?.resultsUrl || marathonStorage.getResultsUrl(activeEvent?.id);
-    if (url && url.trim()) {
-      window.open(url.trim(), '_blank', 'noopener,noreferrer');
-    } else {
-      alert('Официальные результаты забега будут опубликованы организаторами сразу после финиша.');
+    const raw = activeEvent?.resultsUrl || marathonStorage.getResultsUrl(activeEvent?.id);
+    if (raw && raw.trim()) {
+      let finalUrl = raw.trim();
+      if (!/^https?:\/\//i.test(finalUrl)) {
+        finalUrl = 'https://' + finalUrl;
+      }
+      window.open(finalUrl, '_blank', 'noopener,noreferrer');
+      return;
     }
+    setResultsNoticeOpen(true);
   };
 
   const loadData = () => {
@@ -261,6 +266,34 @@ export function App() {
         onClose={() => setActiveDocumentKey(null)}
         documentKey={activeDocumentKey}
       />
+
+      {/* Friendly Notice Modal when Results Link is not published yet */}
+      {resultsNoticeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="relative w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-2xl text-center space-y-4">
+            <div className="w-16 h-16 rounded-3xl bg-red-50 text-red-600 flex items-center justify-center mx-auto border border-red-100 shadow-md">
+              <Trophy className="w-8 h-8" />
+            </div>
+            <div>
+              <span className="text-xs uppercase font-bold text-red-600 tracking-widest block mb-1">
+                Официальный хронометраж
+              </span>
+              <h3 className="text-xl sm:text-2xl font-black font-athletic text-slate-900">
+                РЕЗУЛЬТАТЫ ЗАБЕГА
+              </h3>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                Итоговые протоколы и результаты финишеров будут опубликованы организаторами сразу после завершения забега.
+              </p>
+            </div>
+            <button
+              onClick={() => setResultsNoticeOpen(false)}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 text-white font-black text-xs uppercase tracking-wider hover:from-red-500 hover:to-rose-500 transition-all shadow-lg shadow-red-500/25 cursor-pointer"
+            >
+              Понятно
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

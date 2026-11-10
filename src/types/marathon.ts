@@ -96,6 +96,7 @@ export interface EventOptionsConfig {
   charityFundName?: string; // e.g. "фонд «Бақытты Бала»"
   charityDescription?: string; // e.g. "Средства пойдут на закупку спортивной формы..."
   enableStartClusters?: boolean; // Control start cluster & elite pace selection in registration
+  resultsUrl?: string; // Optional direct results URL for this event
 }
 
 export interface MarathonEvent {

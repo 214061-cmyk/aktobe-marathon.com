@@ -27,12 +27,16 @@ function eventToDb(e: MarathonEvent) {
     distances: e.distances,
     schedule: e.schedule || [],
     sponsors: e.sponsors || [],
-    options_config: e.optionsConfig,
-    results_url: e.resultsUrl || null
+    options_config: {
+      ...(e.optionsConfig || {}),
+      resultsUrl: e.resultsUrl || ''
+    }
   };
 }
 
 function dbToEvent(row: any): MarathonEvent {
+  const optConfig = row.options_config || row.optionsConfig || {};
+  const resUrl = optConfig.resultsUrl || row.results_url || row.resultsUrl || undefined;
   return {
     id: row.id,
     title: row.title,
@@ -51,8 +55,8 @@ function dbToEvent(row: any): MarathonEvent {
     distances: row.distances || [],
     schedule: row.schedule || [],
     sponsors: row.sponsors || [],
-    optionsConfig: row.options_config || row.optionsConfig,
-    resultsUrl: row.results_url || row.resultsUrl || undefined
+    optionsConfig: optConfig,
+    resultsUrl: resUrl
   };
 }
 
@@ -475,27 +479,61 @@ class MarathonStorage {
 
   // --- RESULTS URL ---
   public getResultsUrl(eventId?: string): string {
+    const direct = localStorage.getItem('qazaq_run_results_url_v1');
+    if (direct && direct.trim()) return direct.trim();
+
     if (eventId) {
       const evt = this.events.find(e => e.id === eventId);
       if (evt?.resultsUrl) return evt.resultsUrl;
+      if (evt?.optionsConfig?.resultsUrl) return evt.optionsConfig.resultsUrl;
     }
     const current = this.events.find(e => e.status !== 'completed') || this.events[0];
-    return current?.resultsUrl || '';
+    return current?.resultsUrl || current?.optionsConfig?.resultsUrl || '';
   }
 
   public setResultsUrl(url: string, eventId?: string): void {
+    const clean = url.trim();
+    if (clean) {
+      localStorage.setItem('qazaq_run_results_url_v1', clean);
+    } else {
+      localStorage.removeItem('qazaq_run_results_url_v1');
+    }
+
     if (eventId) {
       const evt = this.events.find(e => e.id === eventId);
       if (evt) {
-        evt.resultsUrl = url.trim();
+        evt.resultsUrl = clean;
+        if (!evt.optionsConfig) {
+          evt.optionsConfig = {
+            enableTShirt: true,
+            tShirtPrice: 0,
+            enableMedalEngraving: true,
+            medalEngravingPrice: 2000,
+            enablePastaParty: true,
+            pastaPartyPrice: 3500,
+            enableCharity: true
+          };
+        }
+        evt.optionsConfig.resultsUrl = clean;
         this.saveEvent(evt);
       }
     } else {
-      const current = this.events.find(e => e.status !== 'completed') || this.events[0];
-      if (current) {
-        current.resultsUrl = url.trim();
-        this.saveEvent(current);
+      for (const ev of this.events) {
+        ev.resultsUrl = clean;
+        if (!ev.optionsConfig) {
+          ev.optionsConfig = {
+            enableTShirt: true,
+            tShirtPrice: 0,
+            enableMedalEngraving: true,
+            medalEngravingPrice: 2000,
+            enablePastaParty: true,
+            pastaPartyPrice: 3500,
+            enableCharity: true
+          };
+        }
+        ev.optionsConfig.resultsUrl = clean;
       }
+      this.persist();
     }
   }
 

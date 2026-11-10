@@ -185,6 +185,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newEventCity, setNewEventCity] = useState('');
   const [newEventDate, setNewEventDate] = useState('2026-09-20');
   const [newEventLocation, setNewEventLocation] = useState('');
+  const [savedResultsUrlMsg, setSavedResultsUrlMsg] = useState<string | null>(null);
+
+  const formatExternalUrl = (url: string): string => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const handleQuickSaveResultsUrl = () => {
+    if (!currentEvent) return;
+    const cleanUrl = formatExternalUrl(eventForm.resultsUrl || '');
+    setEventForm(prev => ({ ...prev, resultsUrl: cleanUrl }));
+    marathonStorage.setResultsUrl(cleanUrl, currentEvent.id);
+    setSavedResultsUrlMsg('✓ Ссылка успешно сохранена и активирована на сайте!');
+    setTimeout(() => setSavedResultsUrlMsg(null), 4000);
+  };
 
   const refreshData = () => {
     const allEvents = marathonStorage.getEvents();
@@ -444,6 +461,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     if (!currentEvent) return;
     const isoDate = eventForm.date.length === 16 ? `${eventForm.date}:00` : eventForm.date;
+    const cleanResultsUrl = eventForm.resultsUrl ? formatExternalUrl(eventForm.resultsUrl) : '';
     const updated: MarathonEvent = {
       ...currentEvent,
       title: eventForm.title.trim(),
@@ -457,10 +475,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       prizePool: eventForm.prizePool.trim(),
       totalSlots: Number(eventForm.totalSlots),
       status: eventForm.status,
-      resultsUrl: eventForm.resultsUrl ? eventForm.resultsUrl.trim() : undefined,
-      optionsConfig: eventForm.optionsConfig
+      resultsUrl: cleanResultsUrl || undefined,
+      optionsConfig: {
+        ...(eventForm.optionsConfig || {}),
+        resultsUrl: cleanResultsUrl
+      }
     };
     marathonStorage.saveEvent(updated);
+    if (cleanResultsUrl) {
+      marathonStorage.setResultsUrl(cleanResultsUrl, currentEvent.id);
+    }
     alert('Параметры забега успешно сохранены! Дата старта, опции и настройки обновлены.');
     refreshData();
   };
@@ -2165,35 +2189,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                 {/* SECTION: RESULTS URL */}
                 <div className="space-y-3 pt-4 border-t border-zinc-800">
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2 pb-1 border-b border-zinc-800">
-                    <Trophy className="w-4 h-4 text-red-500" />
-                    Ссылка на результаты забега (MyLaps / Тайминг / Протоколы)
-                  </h4>
-                  <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                  <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-red-500" />
+                      Ссылка на результаты забега (MyLaps / Тайминг / Протоколы)
+                    </h4>
+                    {savedResultsUrlMsg && (
+                      <span className="text-xs text-lime-400 font-bold animate-in fade-in">
+                        {savedResultsUrlMsg}
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-3">
                     <label className="text-zinc-300 font-bold block text-xs">
                       Прямая ссылка для перехода участников по кнопке «Результаты забега»:
                     </label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap sm:flex-nowrap gap-2">
                       <input
-                        type="url"
+                        type="text"
                         value={eventForm.resultsUrl || ''}
                         placeholder="https://results.mylaps.com/... или ссылка на протоколы"
                         onChange={e => setEventForm({ ...eventForm, resultsUrl: e.target.value })}
                         className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-lime-400 focus:outline-none"
                       />
+                      <button
+                        type="button"
+                        onClick={handleQuickSaveResultsUrl}
+                        className="px-4 py-2.5 bg-lime-400 hover:bg-lime-300 text-black font-black text-xs uppercase rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                      >
+                        <Check className="w-3.5 h-3.5 stroke-[3]" /> Сохранить ссылку
+                      </button>
                       {eventForm.resultsUrl && (
                         <a
-                          href={eventForm.resultsUrl}
+                          href={formatExternalUrl(eventForm.resultsUrl)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-red-400 rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
+                          className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-red-400 rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs whitespace-nowrap"
                         >
                           <ExternalLink className="w-3.5 h-3.5" /> Проверить
                         </a>
                       )}
                     </div>
                     <p className="text-[11px] text-zinc-400">
-                      Когда участники нажимают на кнопку <b>«Результаты забега»</b> в шапке сайта, они сразу переходят по этой ссылке в новой вкладке браузера.
+                      Когда участники нажимают на кнопку <b>«Результаты забега»</b> в шапке сайта, они сразу переходят по этой ссылке в новой вкладке браузера. Вы можете нажать <b>«Сохранить ссылку»</b> прямо здесь для мгновенного применения.
                     </p>
                   </div>
                 </div>

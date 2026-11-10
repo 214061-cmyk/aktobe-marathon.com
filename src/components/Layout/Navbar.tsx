@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Trophy, Menu, X, Sparkles } from 'lucide-react';
+import { marathonStorage } from '../../services/marathonStorage';
 
 interface NavbarProps {
   onOpenRegistration: () => void;
@@ -16,12 +17,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [currentLang, setCurrentLang] = useState<'RU' | 'KZ' | 'EN'>('RU');
 
   const handleResultsClick = () => {
-    if (resultsUrl && resultsUrl.trim()) {
-      window.open(resultsUrl.trim(), '_blank', 'noopener,noreferrer');
-    } else if (onOpenResults) {
+    if (onOpenResults) {
       onOpenResults();
-    } else {
-      alert('Официальные результаты забега будут опубликованы организаторами сразу после финиша.');
+      return;
+    }
+    const raw = resultsUrl || marathonStorage.getResultsUrl();
+    if (raw && raw.trim()) {
+      let finalUrl = raw.trim();
+      if (!/^https?:\/\//i.test(finalUrl)) {
+        finalUrl = 'https://' + finalUrl;
+      }
+      window.open(finalUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
