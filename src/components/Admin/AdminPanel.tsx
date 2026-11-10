@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { MarathonEvent, Distance, Participant, AgeCategory, Sponsor, EventOptionsConfig, ScheduleDay, ScheduleItem, RoutePoint, DocumentKey } from '../../types/marathon';
 import { DocumentsManager } from './DocumentsManager';
+import { NewsletterManager } from './NewsletterManager';
 import { DocumentModal } from '../Legal/DocumentModal';
 import { marathonStorage } from '../../services/marathonStorage';
 import { calculateAge, determineAgeCategory, DEFAULT_ADULT_CATEGORIES, DEFAULT_YOUTH_10K_CATEGORIES, DEFAULT_KIDS_CATEGORIES } from '../../utils/ageUtils';
@@ -11,7 +12,7 @@ import {
   DollarSign, TrendingUp, RefreshCw, Download, ChevronRight,
   MapPin, Clock, Award, AlertCircle, AlertTriangle, CheckCircle2,
   Tag, Layers, Sparkles, ExternalLink, Globe, Shirt, Utensils, Heart, Image as ImageIcon,
-  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive
+  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive, Mail
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -30,7 +31,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [events, setEvents] = useState<MarathonEvent[]>([]);
   const [currentEvent, setCurrentEvent] = useState<MarathonEvent | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents' | 'newsletter'>('overview');
   const [previewDocKey, setPreviewDocKey] = useState<DocumentKey | null>(null);
 
   // Participants Search & Filters
@@ -1172,6 +1173,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               activeTab === 'documents' ? 'bg-white text-red-600 font-bold' : 'bg-zinc-800 text-zinc-300'
             }`}>
               5
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('newsletter')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'newsletter'
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Mail className="w-4 h-4 text-rose-400" />
+              Email-рассылки & CRM
+            </div>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              activeTab === 'newsletter'
+                ? 'bg-white text-rose-600'
+                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+            }`}>
+              {marathonStorage.getSubscribers().length.toLocaleString('ru-RU')}
             </span>
           </button>
 
@@ -2636,6 +2658,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* TAB: LEGAL DOCUMENTS & REGULATIONS */}
           {activeTab === 'documents' && (
             <DocumentsManager onOpenPreview={(key) => setPreviewDocKey(key)} />
+          )}
+
+          {/* TAB: EMAIL NEWSLETTER & ATHLETE CRM */}
+          {activeTab === 'newsletter' && (
+            <NewsletterManager />
           )}
 
         </main>

@@ -184,3 +184,51 @@ export interface RaceResult {
     [key: string]: string | undefined;
   };
 }
+
+export interface NewsletterContact {
+  id: string;
+  email: string;
+  fullName?: string;
+  firstName?: string;
+  name: string;
+  phone?: string;
+  city?: string;
+  source: 'archive_import' | 'website_registration' | 'manual' | string;
+  subscribedAt?: string;
+  createdAt?: string;
+  status?: 'active' | 'unsubscribed';
+  active?: boolean;
+}
+
+export interface EmailTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  bannerImageUrl?: string;
+  badgeText: string;
+  title: string;
+  greetingText?: string;
+  greeting?: string;
+  mainBodyText?: string;
+  body?: string;
+  highlightBoxTitle?: string;
+  highlightBoxText?: string;
+  ctaButtonText: string;
+  ctaButtonUrl: string;
+  footerNote?: string;
+  footerText?: string;
+  updatedAt?: string;
+}
+
+export interface EmailServerConfig {
+  provider: 'resend' | 'smtp' | 'demo';
+  resendApiKey?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpPassword?: string;
+  smtpSecure?: boolean;
+  fromName: string;
+  fromEmail: string;
+}

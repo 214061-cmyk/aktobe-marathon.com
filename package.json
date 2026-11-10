@@ -17,12 +17,14 @@
     "canvas-confetti": "^1.9.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.54.0",
+    "nodemailer": "^10.5.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
