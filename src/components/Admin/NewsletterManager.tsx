@@ -33,8 +33,11 @@ export const NewsletterManager: React.FC = () => {
   const [newContact, setNewContact] = useState({ name: '', email: '', phone: '', city: 'Актобе' });
 
   // Test send state
-  const [testEmailAddress, setTestEmailAddress] = useState('org@aktobemarathon.kz');
+  const [testEmailAddress, setTestEmailAddress] = useState('ulan.turemuratov@alex-asu.kz');
   const [testSendStatus, setTestSendStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error'; message: string }>({ type: 'idle', message: '' });
+
+  // Server connection test state
+  const [serverTestStatus, setServerTestStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error'; message: string }>({ type: 'idle', message: '' });
 
   // Mass send state
   const [massSendAudience, setMassSendAudience] = useState<'all' | 'reg' | 'old'>('all');
@@ -152,7 +155,50 @@ export const NewsletterManager: React.FC = () => {
 
   const handleSaveServerConfig = () => {
     marathonStorage.saveEmailServerConfig(serverConfig);
-    alert('✅ Настройки почтового сервера успешно сохранены!');
+    setServerTestStatus({
+      type: 'success',
+      message: '✅ Настройки почтового сервера успешно сохранены в системе!'
+    });
+    setTimeout(() => {
+      setServerTestStatus(prev => prev.message.includes('сохранены') ? { type: 'idle', message: '' } : prev);
+    }, 4000);
+  };
+
+  // Test SMTP / API server connection (Verification check)
+  const handleTestServerConnection = async () => {
+    setServerTestStatus({ type: 'loading', message: 'Проверка подключения к почтовому серверу...' });
+    
+    try {
+      // Also automatically auto-save latest entered values to storage
+      marathonStorage.saveEmailServerConfig(serverConfig);
+
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify',
+          serverConfig
+        })
+      });
+
+      const resData = await response.json();
+      if (resData.success) {
+        setServerTestStatus({
+          type: 'success',
+          message: resData.message || '✅ Подключение успешно! Почтовый сервер ответил и авторизация подтверждена.'
+        });
+      } else {
+        setServerTestStatus({
+          type: 'error',
+          message: resData.error || resData.message || '❌ Ошибка проверки подключения к серверу'
+        });
+      }
+    } catch (err: any) {
+      setServerTestStatus({
+        type: 'error',
+        message: '❌ Не удалось связаться с сервером отправки: ' + (err?.message || err)
+      });
+    }
   };
 
   // Test email sender
@@ -163,7 +209,7 @@ export const NewsletterManager: React.FC = () => {
       return;
     }
 
-    setTestSendStatus({ type: 'loading', message: 'Отправка тестового письма...' });
+    setTestSendStatus({ type: 'loading', message: 'Отправка тестового письма через ' + serverConfig.provider.toUpperCase() + '...' });
     
     try {
       const html = buildEmailHtml(currentTemplate, 'Виктор Тестовый');
@@ -174,7 +220,7 @@ export const NewsletterManager: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           serverConfig,
-          to: testEmailAddress,
+          to: testEmailAddress.trim(),
           recipientName: 'Виктор Тестовый',
           subject: '[ТЕСТ] ' + subject,
           html
@@ -182,21 +228,24 @@ export const NewsletterManager: React.FC = () => {
       });
 
       const resData = await response.json();
-      if (resData.success) {
+      const isOk = resData.success && (resData.sentCount === undefined || resData.sentCount > 0);
+
+      if (isOk) {
         setTestSendStatus({
           type: 'success',
-          message: `Письмо успешно отправлено на ${testEmailAddress}! Режим: ${resData.provider || serverConfig.provider}`
+          message: `✅ Письмо успешно отправлено на ${testEmailAddress}! Режим: ${resData.provider || serverConfig.provider}`
         });
       } else {
+        const errorDetail = resData.error || resData.message || resData.errors?.[0]?.error || 'Сервер отклонил отправку письма';
         setTestSendStatus({
           type: 'error',
-          message: resData.message || 'Ошибка отправки тестового письма'
+          message: `❌ Не удалось отправить письмо: ${errorDetail}`
         });
       }
     } catch (err: any) {
       setTestSendStatus({
         type: 'error',
-        message: 'Не удалось связаться с сервером отправки: ' + (err?.message || err)
+        message: '❌ Ошибка сети при обращении к серверу: ' + (err?.message || err)
       });
     }
   };
@@ -345,14 +394,16 @@ export const NewsletterManager: React.FC = () => {
         });
 
         const resData = await response.json();
-        if (resData.success) {
+        const isOk = resData.success && (resData.sentCount === undefined || resData.sentCount > 0);
+        if (isOk) {
           sent++;
           if (i % 10 === 0 || i === audience.length - 1) {
             setMassSendLogs(prev => [`✅ Доставлено: ${contact.email} (${personName})`, ...prev.slice(0, 50)]);
           }
         } else {
           failed++;
-          setMassSendLogs(prev => [`❌ Ошибка [${contact.email}]: ${resData.message}`, ...prev.slice(0, 50)]);
+          const errMsg = resData.error || resData.message || resData.errors?.[0]?.error || 'Сервер отклонил письмо';
+          setMassSendLogs(prev => [`❌ Ошибка [${contact.email}]: ${errMsg}`, ...prev.slice(0, 50)]);
         }
       } catch (err: any) {
         failed++;
@@ -1162,16 +1213,33 @@ export const NewsletterManager: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    Email отправителя (From)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                      Email отправителя (From)
+                    </label>
+                    {serverConfig.provider === 'smtp' && serverConfig.smtpUser && serverConfig.fromEmail !== serverConfig.smtpUser && (
+                      <button
+                        type="button"
+                        onClick={() => setServerConfig({ ...serverConfig, fromEmail: serverConfig.smtpUser || '' })}
+                        className="text-[10px] text-amber-400 hover:underline"
+                        title="Подставить адрес логина SMTP"
+                      >
+                        Совместить с логином
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="email"
                     value={serverConfig.fromEmail}
                     onChange={e => setServerConfig({ ...serverConfig, fromEmail: e.target.value })}
                     className="w-full bg-slate-950/70 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:border-rose-500 focus:outline-none"
-                    placeholder="info@aktobemarathon.kz"
+                    placeholder="scan@alex-asu.kz"
                   />
+                  {serverConfig.provider === 'smtp' && (
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      💡 Совет: Корпоративные SMTP-серверы часто блокируют отправку, если <code>From</code> отличается от логина авторизации (<strong>{serverConfig.smtpUser || 'логин'}</strong>).
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1270,13 +1338,53 @@ export const NewsletterManager: React.FC = () => {
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={handleSaveServerConfig}
-                className="w-full py-2.5 rounded-xl font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 transition-all text-xs uppercase tracking-wider"
-              >
-                💾 Сохранить параметры сервера
-              </button>
+              {/* Server Test Feedback / Diagnostics Box */}
+              {serverTestStatus.message && (
+                <div className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 transition-all ${
+                  serverTestStatus.type === 'loading'
+                    ? 'bg-blue-500/10 text-blue-300 border border-blue-500/30'
+                    : serverTestStatus.type === 'success'
+                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                    : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {serverTestStatus.type === 'loading' && <RefreshCw className="w-4 h-4 shrink-0 mt-0.5 animate-spin text-blue-400" />}
+                  {serverTestStatus.type === 'success' && <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />}
+                  {serverTestStatus.type === 'error' && <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />}
+                  <div className="flex-1 space-y-1">
+                    <div className="font-semibold leading-relaxed">{serverTestStatus.message}</div>
+                    {serverTestStatus.type === 'error' && serverConfig.provider === 'smtp' && (
+                      <div className="text-[11px] text-slate-300 opacity-90 pt-1.5 border-t border-rose-500/20 space-y-0.5">
+                        <div className="font-bold text-rose-300">Рекомендации по устранению ошибки:</div>
+                        <div>• Если ошибка <em>authentication failed (535)</em> — перепроверьте правильность пароля почты <code>{serverConfig.smtpUser}</code>.</div>
+                        <div>• Если сервер не отвечает по SSL (порт 465), попробуйте снять галочку SSL и использовать порт <strong>587</strong> (STARTTLS) или порт <strong>25</strong>.</div>
+                        <div>• Убедитесь, что <em>Email отправителя (From)</em> совпадает с логином <code>{serverConfig.smtpUser || 'scan@alex-asu.kz'}</code>.</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Server Action Buttons: Test Connection + Save */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleTestServerConnection}
+                  disabled={serverTestStatus.type === 'loading'}
+                  className="py-2.5 px-4 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 hover:border-slate-600 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
+                  title="Отправить запрос проверки соединения и авторизации к почтовому серверу"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${serverTestStatus.type === 'loading' ? 'animate-spin text-rose-400' : 'text-slate-400'}`} />
+                  {serverTestStatus.type === 'loading' ? 'Проверка...' : '🔌 Проверить подключение'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveServerConfig}
+                  className="py-2.5 px-4 rounded-xl font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                >
+                  💾 Сохранить параметры
+                </button>
+              </div>
             </div>
           </div>
 
