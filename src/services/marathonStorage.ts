@@ -7,6 +7,7 @@ const STORAGE_KEY_EVENTS = 'qazaq_run_events_v2';
 const STORAGE_KEY_PARTICIPANTS = 'qazaq_run_participants_v2';
 const STORAGE_KEY_RESULTS = 'qazaq_run_results_v2';
 const STORAGE_KEY_DOCUMENTS = 'qazaq_run_documents_v2';
+const STORAGE_KEY_DIPLOMA_BG = 'qazaq_run_diploma_bg_v2';
 
 function eventToDb(e: MarathonEvent) {
   return {
@@ -27,7 +28,8 @@ function eventToDb(e: MarathonEvent) {
     distances: e.distances,
     schedule: e.schedule || [],
     sponsors: e.sponsors || [],
-    options_config: e.optionsConfig
+    options_config: e.optionsConfig,
+    diploma_bg_url: e.diplomaBgUrl || null
   };
 }
 
@@ -50,7 +52,8 @@ function dbToEvent(row: any): MarathonEvent {
     distances: row.distances || [],
     schedule: row.schedule || [],
     sponsors: row.sponsors || [],
-    optionsConfig: row.options_config || row.optionsConfig
+    optionsConfig: row.options_config || row.optionsConfig,
+    diplomaBgUrl: row.diploma_bg_url || row.diplomaBgUrl || undefined
   };
 }
 
@@ -445,8 +448,97 @@ class MarathonStorage {
   }
 
   // --- RESULTS ---
-  public getResults(): RaceResult[] {
-    return [...this.results];
+  public getResults(eventId?: string, distanceName?: string): RaceResult[] {
+    let list = [...this.results];
+    if (eventId) {
+      list = list.filter(r => !r.eventId || r.eventId === eventId);
+    }
+    if (distanceName && distanceName !== 'all') {
+      list = list.filter(r => r.distanceName === distanceName);
+    }
+    return list;
+  }
+
+  public saveResults(results: RaceResult[]): void {
+    this.results = results;
+    this.persist();
+  }
+
+  public addResult(result: RaceResult): void {
+    this.results.push(result);
+    this.persist();
+  }
+
+  public deleteResult(id: string): void {
+    this.results = this.results.filter(r => r.id !== id);
+    this.persist();
+  }
+
+  public clearResults(distanceName?: string, eventId?: string): void {
+    if (!distanceName && !eventId) {
+      this.results = [];
+    } else {
+      this.results = this.results.filter(r => {
+        if (distanceName && r.distanceName === distanceName) return false;
+        if (eventId && r.eventId === eventId) return false;
+        return true;
+      });
+    }
+    this.persist();
+  }
+
+  public importResults(
+    newResults: RaceResult[],
+    mode: 'replace_all' | 'replace_distance' | 'append' = 'replace_distance',
+    distanceName?: string
+  ): { imported: number; total: number } {
+    if (mode === 'replace_all') {
+      this.results = newResults;
+    } else if (mode === 'replace_distance' && distanceName) {
+      this.results = this.results.filter(r => r.distanceName !== distanceName).concat(newResults);
+    } else {
+      const keyMap = new Map<string, number>();
+      this.results.forEach((r, idx) => {
+        keyMap.set(r.distanceName + '__' + r.bibNumber, idx);
+      });
+      const appendList: RaceResult[] = [];
+      newResults.forEach(r => {
+        const key = r.distanceName + '__' + r.bibNumber;
+        if (keyMap.has(key)) {
+          this.results[keyMap.get(key)!] = r;
+        } else {
+          appendList.push(r);
+        }
+      });
+      this.results = [...this.results, ...appendList];
+    }
+    this.persist();
+    return { imported: newResults.length, total: this.results.length };
+  }
+
+  public getDiplomaBgUrl(eventId?: string): string | null {
+    if (eventId) {
+      const evt = this.events.find(e => e.id === eventId);
+      if (evt?.diplomaBgUrl) return evt.diplomaBgUrl;
+    }
+    const globalBg = localStorage.getItem(STORAGE_KEY_DIPLOMA_BG);
+    return globalBg || null;
+  }
+
+  public setDiplomaBgUrl(url: string | null, eventId?: string): void {
+    if (url) {
+      localStorage.setItem(STORAGE_KEY_DIPLOMA_BG, url);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_DIPLOMA_BG);
+    }
+    if (eventId) {
+      const evt = this.events.find(e => e.id === eventId);
+      if (evt) {
+        evt.diplomaBgUrl = url || undefined;
+        this.saveEvent(evt);
+      }
+    }
+    this.persist();
   }
 
   // --- EXPORT TO EXCEL & CSV ---

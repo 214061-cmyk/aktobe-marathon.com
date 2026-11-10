@@ -1,18 +1,37 @@
 import React, { useState } from 'react';
 import { RaceResult } from '../../types/marathon';
 import { marathonStorage } from '../../services/marathonStorage';
-import { Search, Trophy, Medal, Timer, Award, Download, X, ExternalLink } from 'lucide-react';
+import { downloadDiploma } from '../../utils/diplomaGenerator';
+import { Search, Trophy, Medal, Award, Download, X, Printer } from 'lucide-react';
 
 export const ResultsSearch: React.FC = () => {
   const [query, setQuery] = useState('');
   const [selectedResult, setSelectedResult] = useState<RaceResult | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const results = marathonStorage.getResults();
+  const diplomaBgUrl = marathonStorage.getDiplomaBgUrl();
 
   const filtered = results.filter(r =>
     r.fullName.toLowerCase().includes(query.toLowerCase()) ||
     r.bibNumber.toLowerCase().includes(query.toLowerCase()) ||
-    r.distanceName.toLowerCase().includes(query.toLowerCase())
+    r.distanceName.toLowerCase().includes(query.toLowerCase()) ||
+    (r.team && r.team.toLowerCase().includes(query.toLowerCase())) ||
+    (r.city && r.city.toLowerCase().includes(query.toLowerCase()))
   );
+
+  const handleDownloadDiploma = async (item: RaceResult) => {
+    setIsDownloading(true);
+    try {
+      await downloadDiploma(item, {
+        bgUrl: diplomaBgUrl
+      });
+    } catch (e) {
+      console.error('Error downloading diploma', e);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="bg-[#0e0f17] border border-zinc-800 rounded-3xl p-5 sm:p-7 shadow-2xl">
@@ -26,7 +45,7 @@ export const ResultsSearch: React.FC = () => {
             ПОИСК РЕЗУЛЬТАТОВ ЗАБЕГА
           </h3>
           <p className="text-xs text-zinc-400 mt-1">
-            Введите стартовый номер (Bib) или фамилию атлета для просмотра сплитов и диплома
+            Введите стартовый номер (Bib) или фамилию атлета для просмотра официального времени и диплома финишера
           </p>
         </div>
 
@@ -35,7 +54,7 @@ export const ResultsSearch: React.FC = () => {
           <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Номер Bib (42-101) или фамилия..."
+            placeholder="Номер Bib (например: 821) или фамилия..."
             value={query}
             onChange={e => setQuery(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-lime-400 transition-colors"
@@ -106,7 +125,7 @@ export const ResultsSearch: React.FC = () => {
                   <td className="py-3.5 px-4 text-right">
                     <button
                       onClick={() => setSelectedResult(item)}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-lime-400 hover:text-black text-xs font-bold transition-all text-zinc-300 inline-flex items-center gap-1"
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-lime-400 hover:text-black text-xs font-bold transition-all text-zinc-300 inline-flex items-center gap-1 cursor-pointer"
                     >
                       <Award className="w-3.5 h-3.5" />
                       Диплом
@@ -121,11 +140,11 @@ export const ResultsSearch: React.FC = () => {
 
       {/* Finisher Diploma Modal */}
       {selectedResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-          <div className="relative w-full max-w-lg bg-zinc-950 border-2 border-amber-400/50 rounded-3xl p-6 sm:p-8 shadow-2xl text-center space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-zinc-950 border-2 border-amber-400/50 rounded-3xl p-6 sm:p-8 shadow-2xl text-center space-y-4 animate-in fade-in zoom-in-95 my-auto">
             <button
               onClick={() => setSelectedResult(null)}
-              className="absolute top-4 right-4 text-zinc-400 hover:text-white"
+              className="absolute top-4 right-4 text-zinc-400 hover:text-white p-2 rounded-xl hover:bg-zinc-800 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -148,7 +167,7 @@ export const ResultsSearch: React.FC = () => {
                 {selectedResult.fullName}
               </div>
               <div className="text-sm font-mono text-lime-400 mt-1 font-bold">
-                Стартовый номер: {selectedResult.bibNumber}
+                Стартовый номер: №{selectedResult.bibNumber}
               </div>
             </div>
 
@@ -168,23 +187,25 @@ export const ResultsSearch: React.FC = () => {
               </div>
             </div>
 
-            <div className="text-xs text-zinc-400 pt-2">
+            <div className="text-xs text-zinc-400 pt-1">
               Место в абсолюте: <b className="text-white">#{selectedResult.overallPlace}</b> • В категории {selectedResult.ageGroup}: <b className="text-white">#{selectedResult.categoryPlace}</b>
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-col sm:flex-row gap-2 pt-3">
               <button
-                onClick={() => window.print()}
-                className="flex-1 py-3 rounded-xl bg-amber-400 text-black font-black text-xs uppercase tracking-wider hover:bg-amber-300 transition-colors flex items-center justify-center gap-2"
+                onClick={() => handleDownloadDiploma(selectedResult)}
+                disabled={isDownloading}
+                className="flex-1 py-3.5 rounded-xl bg-amber-400 text-black font-black text-xs uppercase tracking-wider hover:bg-amber-300 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-amber-400/20"
               >
                 <Download className="w-4 h-4" />
-                Скачать сертификат (PDF)
+                {isDownloading ? 'Формирование диплома...' : 'Скачать диплом (PNG)'}
               </button>
               <button
-                onClick={() => setSelectedResult(null)}
-                className="px-5 py-3 rounded-xl bg-zinc-900 text-zinc-300 text-xs font-bold uppercase hover:bg-zinc-800"
+                onClick={() => window.print()}
+                className="px-4 py-3.5 rounded-xl bg-zinc-800 text-zinc-200 hover:text-white font-bold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-zinc-700"
               >
-                Закрыть
+                <Printer className="w-4 h-4" />
+                Печать
               </button>
             </div>
           </div>

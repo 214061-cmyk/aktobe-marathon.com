@@ -117,6 +117,7 @@ export interface MarathonEvent {
   schedule: ScheduleDay[];
   sponsors: Sponsor[];
   optionsConfig?: EventOptionsConfig;
+  diplomaBgUrl?: string; // Custom background image for finisher diplomas
 }
 
 export interface Participant {
@@ -151,22 +152,27 @@ export interface Participant {
 
 export interface RaceResult {
   id: string;
+  eventId?: string;
+  distanceId?: string;
   bibNumber: string;
   fullName: string;
   name?: string;
   gender: 'M' | 'F' | 'male' | 'female';
   ageGroup: string;
   distanceName: string;
-  chipTime: string; // 02:45:12
+  chipTime: string; // e.g. "00:34:03"
   gunTime: string;
-  avgPace: string; // 3:55 min/km
+  avgPace: string; // e.g. "3:20 мин/км"
   overallPlace: number;
   genderPlace: number;
   categoryPlace: number;
   overallRank?: number;
   genderRank?: number;
   categoryRank?: number;
-  splits: {
+  city?: string;
+  country?: string;
+  team?: string;
+  splits?: Record<string, string> | {
     split10k?: string;
     split21k?: string;
     split30k?: string;
@@ -174,5 +180,6 @@ export interface RaceResult {
     km10?: string;
     km21?: string;
     km30?: string;
+    [key: string]: string | undefined;
   };
 }
