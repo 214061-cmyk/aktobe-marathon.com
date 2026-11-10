@@ -1,17 +1,35 @@
 import React, { useState } from 'react';
 import { Trophy, Menu, X, Sparkles } from 'lucide-react';
+import { marathonStorage } from '../../services/marathonStorage';
 
 interface NavbarProps {
   onOpenRegistration: () => void;
-  onOpenResults: () => void;
+  onOpenResults?: () => void;
+  resultsUrl?: string;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenRegistration,
-  onOpenResults
+  onOpenResults,
+  resultsUrl
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentLang, setCurrentLang] = useState<'RU' | 'KZ' | 'EN'>('RU');
+
+  const handleResultsClick = () => {
+    if (onOpenResults) {
+      onOpenResults();
+      return;
+    }
+    const raw = resultsUrl || marathonStorage.getResultsUrl();
+    if (raw && raw.trim()) {
+      let finalUrl = raw.trim();
+      if (!/^https?:\/\//i.test(finalUrl)) {
+        finalUrl = 'https://' + finalUrl;
+      }
+      window.open(finalUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   const navLinks = [
     { label: 'Все события', href: '#events-showcase' },
@@ -58,9 +76,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           ))}
 
-          {/* Results Modal Button */}
+          {/* Results Link Button */}
           <button
-            onClick={onOpenResults}
+            onClick={handleResultsClick}
             className="text-xs font-bold text-red-600 hover:text-red-700 uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer bg-red-50 hover:bg-red-100/80 px-3 py-1.5 rounded-xl border border-red-200"
           >
             <Trophy className="w-3.5 h-3.5 text-red-600" />
@@ -98,9 +116,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Mobile Hamburger Button */}
         <div className="flex md:hidden items-center gap-2">
           <button
-            onClick={onOpenResults}
+            onClick={handleResultsClick}
             className="p-2 rounded-lg bg-red-50 border border-red-200 text-red-600"
-            title="Результаты"
+            title="Результаты забега"
           >
             <Trophy className="w-4 h-4" />
           </button>
@@ -136,11 +154,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
-                onOpenResults();
+                handleResultsClick();
               }}
               className="text-left py-2.5 text-sm font-bold text-red-600 border-b border-slate-100 flex items-center gap-2"
             >
-              <Trophy className="w-4 h-4" /> Результаты забега (Поиск диплома)
+              <Trophy className="w-4 h-4" /> Результаты забега
             </button>
           </div>
 

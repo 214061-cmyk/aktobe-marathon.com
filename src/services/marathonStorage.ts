@@ -1,5 +1,6 @@
-import type { MarathonEvent, Participant, RaceResult, Distance, DocumentKey, LegalDocument } from '../types/marathon';
-import { INITIAL_EVENTS, INITIAL_PARTICIPANTS, INITIAL_RESULTS, INITIAL_LEGAL_DOCUMENTS } from '../data/initialData';
+import type { MarathonEvent, Participant, RaceResult, Distance, DocumentKey, LegalDocument, NewsletterContact, EmailTemplate, EmailServerConfig } from '../types/marathon';
+import { INITIAL_EVENTS, INITIAL_PARTICIPANTS, INITIAL_RESULTS, INITIAL_LEGAL_DOCUMENTS, DEFAULT_EMAIL_TEMPLATES, DEFAULT_EMAIL_SERVER_CONFIG } from '../data/initialData';
+import initialSubscribersRaw from '../data/initialSubscribers.json';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import * as XLSX from 'xlsx';
 
@@ -7,6 +8,9 @@ const STORAGE_KEY_EVENTS = 'qazaq_run_events_v2';
 const STORAGE_KEY_PARTICIPANTS = 'qazaq_run_participants_v2';
 const STORAGE_KEY_RESULTS = 'qazaq_run_results_v2';
 const STORAGE_KEY_DOCUMENTS = 'qazaq_run_documents_v2';
+const STORAGE_KEY_SUBSCRIBERS = 'qazaq_run_subscribers_v2';
+const STORAGE_KEY_EMAIL_TEMPLATES = 'qazaq_run_email_templates_v2';
+const STORAGE_KEY_EMAIL_SERVER = 'qazaq_run_email_server_v2';
 
 function eventToDb(e: MarathonEvent) {
   return {
@@ -27,11 +31,16 @@ function eventToDb(e: MarathonEvent) {
     distances: e.distances,
     schedule: e.schedule || [],
     sponsors: e.sponsors || [],
-    options_config: e.optionsConfig
+    options_config: {
+      ...(e.optionsConfig || {}),
+      resultsUrl: e.resultsUrl || ''
+    }
   };
 }
 
 function dbToEvent(row: any): MarathonEvent {
+  const optConfig = row.options_config || row.optionsConfig || {};
+  const resUrl = optConfig.resultsUrl || row.results_url || row.resultsUrl || undefined;
   return {
     id: row.id,
     title: row.title,
@@ -50,7 +59,8 @@ function dbToEvent(row: any): MarathonEvent {
     distances: row.distances || [],
     schedule: row.schedule || [],
     sponsors: row.sponsors || [],
-    optionsConfig: row.options_config || row.optionsConfig
+    optionsConfig: optConfig,
+    resultsUrl: resUrl
   };
 }
 
@@ -123,6 +133,9 @@ class MarathonStorage {
   private participants: Participant[] = [];
   private results: RaceResult[] = [];
   private documents: LegalDocument[] = INITIAL_LEGAL_DOCUMENTS;
+  private subscribers: NewsletterContact[] = [];
+  private emailTemplates: EmailTemplate[] = [];
+  private emailServerConfig: EmailServerConfig = DEFAULT_EMAIL_SERVER_CONFIG;
   private isSyncing = false;
 
   constructor() {
@@ -157,11 +170,23 @@ class MarathonStorage {
       } else {
         this.documents = [...INITIAL_LEGAL_DOCUMENTS];
       }
+
+      const storedSubs = localStorage.getItem(STORAGE_KEY_SUBSCRIBERS);
+      this.subscribers = storedSubs ? JSON.parse(storedSubs) : (initialSubscribersRaw as unknown as NewsletterContact[]);
+
+      const storedTpls = localStorage.getItem(STORAGE_KEY_EMAIL_TEMPLATES);
+      this.emailTemplates = storedTpls ? JSON.parse(storedTpls) : DEFAULT_EMAIL_TEMPLATES;
+
+      const storedServer = localStorage.getItem(STORAGE_KEY_EMAIL_SERVER);
+      this.emailServerConfig = storedServer ? JSON.parse(storedServer) : DEFAULT_EMAIL_SERVER_CONFIG;
     } catch {
       this.events = INITIAL_EVENTS;
       this.participants = INITIAL_PARTICIPANTS;
       this.results = INITIAL_RESULTS;
       this.documents = [...INITIAL_LEGAL_DOCUMENTS];
+      this.subscribers = (initialSubscribersRaw as unknown as NewsletterContact[]);
+      this.emailTemplates = DEFAULT_EMAIL_TEMPLATES;
+      this.emailServerConfig = DEFAULT_EMAIL_SERVER_CONFIG;
     }
 
     // If Supabase SQL is configured, sync in background
@@ -234,6 +259,9 @@ class MarathonStorage {
       localStorage.setItem(STORAGE_KEY_PARTICIPANTS, JSON.stringify(this.participants));
       localStorage.setItem(STORAGE_KEY_RESULTS, JSON.stringify(this.results));
       localStorage.setItem(STORAGE_KEY_DOCUMENTS, JSON.stringify(this.documents));
+      localStorage.setItem(STORAGE_KEY_SUBSCRIBERS, JSON.stringify(this.subscribers));
+      localStorage.setItem(STORAGE_KEY_EMAIL_TEMPLATES, JSON.stringify(this.emailTemplates));
+      localStorage.setItem(STORAGE_KEY_EMAIL_SERVER, JSON.stringify(this.emailServerConfig));
     } catch (e) {
       console.error('Storage cache error', e);
     }
@@ -361,6 +389,17 @@ class MarathonStorage {
 
     this.participants.unshift(newParticipant);
 
+    // Auto-save runner email into Newsletter subscriber CRM
+    if (newParticipant.email) {
+      this.autoAddSubscriber(
+        `${newParticipant.firstName} ${newParticipant.lastName}`.trim(),
+        newParticipant.email,
+        newParticipant.phone,
+        newParticipant.city,
+        `Регистрация: ${event?.title || 'Забег 2026'}`
+      );
+    }
+
     // Update distance slot count
     if (event && distance) {
       distance.registeredCount = (distance.registeredCount || 0) + 1;
@@ -445,8 +484,90 @@ class MarathonStorage {
   }
 
   // --- RESULTS ---
-  public getResults(): RaceResult[] {
-    return [...this.results];
+  public getResults(eventId?: string, distanceName?: string): RaceResult[] {
+    let list = [...this.results];
+    if (eventId) {
+      list = list.filter(r => !r.eventId || r.eventId === eventId);
+    }
+    if (distanceName && distanceName !== 'all') {
+      list = list.filter(r => r.distanceName === distanceName);
+    }
+    return list;
+  }
+
+  public saveResults(results: RaceResult[]): void {
+    this.results = results;
+    this.persist();
+  }
+
+  public addResult(result: RaceResult): void {
+    this.results.push(result);
+    this.persist();
+  }
+
+  public deleteResult(id: string): void {
+    this.results = this.results.filter(r => r.id !== id);
+    this.persist();
+  }
+
+  // --- RESULTS URL ---
+  public getResultsUrl(eventId?: string): string {
+    const direct = localStorage.getItem('qazaq_run_results_url_v1');
+    if (direct && direct.trim()) return direct.trim();
+
+    if (eventId) {
+      const evt = this.events.find(e => e.id === eventId);
+      if (evt?.resultsUrl) return evt.resultsUrl;
+      if (evt?.optionsConfig?.resultsUrl) return evt.optionsConfig.resultsUrl;
+    }
+    const current = this.events.find(e => e.status !== 'completed') || this.events[0];
+    return current?.resultsUrl || current?.optionsConfig?.resultsUrl || '';
+  }
+
+  public setResultsUrl(url: string, eventId?: string): void {
+    const clean = url.trim();
+    if (clean) {
+      localStorage.setItem('qazaq_run_results_url_v1', clean);
+    } else {
+      localStorage.removeItem('qazaq_run_results_url_v1');
+    }
+
+    if (eventId) {
+      const evt = this.events.find(e => e.id === eventId);
+      if (evt) {
+        evt.resultsUrl = clean;
+        if (!evt.optionsConfig) {
+          evt.optionsConfig = {
+            enableTShirt: true,
+            tShirtPrice: 0,
+            enableMedalEngraving: true,
+            medalEngravingPrice: 2000,
+            enablePastaParty: true,
+            pastaPartyPrice: 3500,
+            enableCharity: true
+          };
+        }
+        evt.optionsConfig.resultsUrl = clean;
+        this.saveEvent(evt);
+      }
+    } else {
+      for (const ev of this.events) {
+        ev.resultsUrl = clean;
+        if (!ev.optionsConfig) {
+          ev.optionsConfig = {
+            enableTShirt: true,
+            tShirtPrice: 0,
+            enableMedalEngraving: true,
+            medalEngravingPrice: 2000,
+            enablePastaParty: true,
+            pastaPartyPrice: 3500,
+            enableCharity: true
+          };
+        }
+        ev.optionsConfig.resultsUrl = clean;
+      }
+      this.persist();
+    }
   }
 
   // --- EXPORT TO EXCEL & CSV ---
@@ -527,6 +648,144 @@ class MarathonStorage {
     this.events = INITIAL_EVENTS;
     this.participants = INITIAL_PARTICIPANTS;
     this.results = INITIAL_RESULTS;
+    this.subscribers = (initialSubscribersRaw as unknown as NewsletterContact[]);
+    this.emailTemplates = DEFAULT_EMAIL_TEMPLATES;
+    this.emailServerConfig = DEFAULT_EMAIL_SERVER_CONFIG;
+    this.persist();
+  }
+
+  // --- NEWSLETTER CRM & SUBSCRIBERS ---
+  public getSubscribers(): NewsletterContact[] {
+    return [...this.subscribers];
+  }
+
+  public addSubscriber(contact: Omit<NewsletterContact, 'id' | 'createdAt'>): NewsletterContact {
+    const cleanEmail = contact.email.trim().toLowerCase();
+    const existingIndex = this.subscribers.findIndex(s => s.email.toLowerCase() === cleanEmail);
+    
+    if (existingIndex >= 0) {
+      // Update existing
+      this.subscribers[existingIndex] = {
+        ...this.subscribers[existingIndex],
+        ...contact,
+        email: cleanEmail
+      };
+      this.persist();
+      return this.subscribers[existingIndex];
+    }
+
+    const newContact: NewsletterContact = {
+      ...contact,
+      email: cleanEmail,
+      id: 'sub-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      createdAt: new Date().toISOString()
+    };
+    this.subscribers.unshift(newContact);
+    this.persist();
+    return newContact;
+  }
+
+  public autoAddSubscriber(name: string, email: string, phone?: string, city?: string, source: string = 'Регистрация на забег'): void {
+    if (!email || !email.includes('@')) return;
+    this.addSubscriber({
+      name: name || 'Участник забега',
+      email: email.trim().toLowerCase(),
+      phone: phone || '',
+      city: city || 'Актобе',
+      source,
+      active: true
+    });
+  }
+
+  public importSubscribers(items: Array<{ name: string; email: string; phone?: string; city?: string }>): number {
+    let imported = 0;
+    const existingMap = new Set(this.subscribers.map(s => s.email.toLowerCase()));
+
+    for (const item of items) {
+      const email = (item.email || '').trim().toLowerCase();
+      if (!email || !email.includes('@') || existingMap.has(email)) continue;
+
+      existingMap.add(email);
+      this.subscribers.push({
+        id: 'sub-imp-' + Date.now() + '-' + (++imported),
+        name: (item.name || '').trim() || 'Участник забега',
+        email,
+        phone: (item.phone || '').trim(),
+        city: (item.city || '').trim() || 'Актобе',
+        source: 'Ручной импорт',
+        createdAt: new Date().toISOString(),
+        active: true
+      });
+    }
+
+    if (imported > 0) {
+      this.persist();
+    }
+    return imported;
+  }
+
+  public deleteSubscriber(id: string): void {
+    this.subscribers = this.subscribers.filter(s => s.id !== id);
+    this.persist();
+  }
+
+  public clearSubscribers(): void {
+    this.subscribers = [];
+    this.persist();
+  }
+
+  public resetSubscribersToDefault(): void {
+    this.subscribers = (initialSubscribersRaw as unknown as NewsletterContact[]);
+    this.persist();
+  }
+
+  public exportSubscribersToExcel(fileName = 'subscribers_aktobe_marathon.xlsx'): void {
+    const rows = this.subscribers.map((s, idx) => ({
+      '№': idx + 1,
+      'Имя': s.name || s.fullName || 'Участник',
+      'Email': s.email,
+      'Телефон': s.phone || '',
+      'Город': s.city || '',
+      'Источник': s.source,
+      'Статус': (s.active ?? (s.status === 'active')) ? 'Активен' : 'Отписан',
+      'Дата добавления': new Date(s.createdAt || s.subscribedAt || Date.now()).toLocaleDateString('ru-RU')
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Подписчики');
+    worksheet['!cols'] = [{ wch: 6 }, { wch: 25 }, { wch: 30 }, { wch: 18 }, { wch: 15 }, { wch: 20 }, { wch: 12 }, { wch: 15 }];
+    XLSX.writeFile(workbook, fileName);
+  }
+
+  // --- EMAIL TEMPLATES ---
+  public getEmailTemplates(): EmailTemplate[] {
+    return [...this.emailTemplates];
+  }
+
+  public saveEmailTemplate(tpl: EmailTemplate): void {
+    const idx = this.emailTemplates.findIndex(t => t.id === tpl.id);
+    const updated = { ...tpl, updatedAt: new Date().toISOString() };
+    if (idx >= 0) {
+      this.emailTemplates[idx] = updated;
+    } else {
+      this.emailTemplates.push(updated);
+    }
+    this.persist();
+  }
+
+  public resetEmailTemplates(): void {
+    this.emailTemplates = DEFAULT_EMAIL_TEMPLATES;
+    this.persist();
+  }
+
+  // --- EMAIL SERVER CONFIG ---
+  public getEmailServerConfig(): EmailServerConfig {
+    return { ...this.emailServerConfig };
+  }
+
+  public saveEmailServerConfig(cfg: EmailServerConfig): void {
+    this.emailServerConfig = { ...cfg };
     this.persist();
   }
 }

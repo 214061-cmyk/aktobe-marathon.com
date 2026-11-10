@@ -1,4 +1,4 @@
-import type { MarathonEvent, Participant, RaceResult, EventOptionsConfig, DocumentKey, LegalDocument } from '../types/marathon';
+import type { MarathonEvent, Participant, RaceResult, EventOptionsConfig, DocumentKey, LegalDocument, EmailTemplate, EmailServerConfig } from '../types/marathon';
 import { DEFAULT_ADULT_CATEGORIES, DEFAULT_YOUTH_10K_CATEGORIES, DEFAULT_KIDS_CATEGORIES } from '../utils/ageUtils';
 
 export const DEFAULT_OPTIONS_CONFIG: EventOptionsConfig = {
@@ -28,6 +28,7 @@ export const INITIAL_EVENTS: MarathonEvent[] = [
     status: 'registration_open',
     description: 'Масштабный международный забег, сертифицированный AIMS. Быстрая плоская трасса через знаковые проспекты города, поддержка тысяч болельщиков, литые медали финишера и рекордный призовой фонд!',
     bannerImage: 'https://images.unsplash.com/photo-1452626038306-9aae5e071dd3?q=80&w=1600&auto=format&fit=crop',
+    resultsUrl: '',
     prizePool: '15 000 000 ₸',
     totalSlots: 4500,
     centerCoords: [50.2877, 57.1856],
@@ -671,3 +672,73 @@ export const INITIAL_LEGAL_DOCUMENTS: LegalDocument[] = [
     fileSize: '150 КБ'
   }
 ];
+
+export const DEFAULT_EMAIL_TEMPLATES: EmailTemplate[] = [
+  {
+    id: 'tpl_registration_open',
+    name: '🚀 Открытие регистрации на новый забег',
+    subject: '🚀 Открыта регистрация на Aqtobe International Marathon 2026!',
+    bannerImageUrl: 'https://images.unsplash.com/photo-1452626038306-9aae5e071dd3?q=80&w=1200&auto=format&fit=crop',
+    badgeText: 'ОФИЦИАЛЬНЫЙ АНОНС СЕЗОНА',
+    title: 'РЕГИСТРАЦИЯ НА AQTOBE MARATHON 2026 ОТКРЫТА!',
+    greetingText: 'Здравствуйте, {NAME}!',
+    mainBodyText: `Рады сообщить, что регистрация на главное легкоатлетическое событие Западного Казахстана официально открыта!
+
+Вас ждут сертифицированные трассы AIMS, быстрый плоский маршрут через центральные проспекты города, литые медали финишера, мощная поддержка тысяч болельщиков и рекордный призовой фонд 15 000 000 ₸.
+
+Доступны дистанции: 42.195 км (Классический марафон), 21.097 км (Полумарафон), 10 км, Скандинавская ходьба и Детский забег 3 км.`,
+    highlightBoxTitle: '🔥 РАННЯЯ РЕГИСТРАЦИЯ (EARLY BIRD)',
+    highlightBoxText: 'Первые 500 слотов доступны по специальной стартовой стоимости. Количество участников на дистанциях ограничено — успейте забронировать свой номер!',
+    ctaButtonText: 'ВЫБРАТЬ ДИСТАНЦИЮ И ЗАРЕГИСТРИРОВАТЬСЯ',
+    ctaButtonUrl: 'https://aktobe-marathoncom.vercel.app/',
+    footerNote: 'Поторопитесь, слоты на популярные дистанции быстро заканчиваются!'
+  },
+  {
+    id: 'tpl_expo_info',
+    name: '📢 Выдача стартовых пакетов (Expo)',
+    subject: '📢 Важная информация: Выдача стартовых пакетов Expo на Aqtobe Marathon',
+    bannerImageUrl: 'https://images.unsplash.com/photo-1513593771513-7b58b6c4af38?q=80&w=1200&auto=format&fit=crop',
+    badgeText: 'ИНФОРМАЦИЯ ДЛЯ УЧАСТНИКОВ',
+    title: 'ИНСТРУКЦИЯ ПО ПОЛУЧЕНИЮ СТАРТОВОГО ПАКЕТА',
+    greetingText: 'Уважаемый(ая) {NAME}!',
+    mainBodyText: `До старта Aqtobe Marathon остаются считанные дни! 
+
+Спортивная выставка Expo и выдача стартовых номеров пройдут 15 и 16 мая в Спортивном комплексе «Коныс» с 10:00 до 20:00.
+
+Для получения стартового пакета вам понадобятся:
+1. Документ, удостоверяющий личность (удостоверение или паспорт).
+2. Медицинская справка о допуске (для дистанций 21.1 км и 42.2 км).
+3. Ваш электронный билет / стартовый номер из письма подтверждения.`,
+    highlightBoxTitle: '⚠️ ОБРАТИТЕ ВНИМАНИЕ',
+    highlightBoxText: 'В день старта 17 мая выдача стартовых пакетов производиться НЕ БУДЕТ. Пожалуйста, заберите ваш стартовый пакет заранее на Expo!',
+    ctaButtonText: 'СМОТРЕТЬ РАСПИСАНИЕ И ЛОКАЦИЮ EXPO',
+    ctaButtonUrl: 'https://aktobe-marathoncom.vercel.app/#schedule',
+    footerNote: 'Ждем вас на спортивной ярмарке Expo!'
+  },
+  {
+    id: 'tpl_custom_announcement',
+    name: '✉️ Информационное сообщение оргкомитета',
+    subject: 'Важное сообщение от оргкомитета Aqtobe Marathon',
+    bannerImageUrl: '',
+    badgeText: 'НОВОСТИ И ОБНОВЛЕНИЯ',
+    title: 'СООБЩЕНИЕ ДЛЯ БЕГОВОГО СООБЩЕСТВА',
+    greetingText: 'Приветствуем, {NAME}!',
+    mainBodyText: `Оргкомитет Aqtobe International Marathon приветствует вас и делится важными новостями подготовки к новому беговому сезону.
+
+Мы подготовили для вас обновленные сертифицированные маршруты, улучшенные пункты питания и гидратации каждые 3 км, а также эксклюзивный дизайн медалей финишера.`,
+    highlightBoxTitle: '💡 БУДЬТЕ В КУРСЕ',
+    highlightBoxText: 'Следите за новостями в наших официальных соцсетях и на сайте мероприятия.',
+    ctaButtonText: 'ПЕРЕЙТИ НА САЙТ ЗАБЕГА',
+    ctaButtonUrl: 'https://aktobe-marathoncom.vercel.app/',
+    footerNote: 'С уважением, Команда Aqtobe Marathon'
+  }
+];
+
+export const DEFAULT_EMAIL_SERVER_CONFIG: EmailServerConfig = {
+  provider: 'demo',
+  fromName: 'Aqtobe International Marathon',
+  fromEmail: 'noreply@aktobe-marathon.com',
+  smtpHost: 'smtp.yandex.ru',
+  smtpPort: 465,
+  smtpSecure: true
+};

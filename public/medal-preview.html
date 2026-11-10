@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Модель Медали: AQTOBE 2027 — STAY YOUNG (Морозный Вихрь)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at 50% 30%, #0d1b2a 0%, #050b14 100%);
+      color: #e0f2fe;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+      max-width: 800px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 14px;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 9999px;
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #38bdf8;
+      margin-bottom: 10px;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, #ffffff 30%, #7dd3fc 70%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+    p.subtitle {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    .container {
+      position: relative;
+      width: 100%;
+      max-width: 900px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 20px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 60px rgba(56, 189, 248, 0.1);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .viewer-area {
+      position: relative;
+      width: 100%;
+      height: 520px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: grab;
+      user-select: none;
+      perspective: 1000px;
+    }
+    .viewer-area:active { cursor: grabbing; }
+
+    /* Medal container with 3D tilt */
+    .medal-stage {
+      position: relative;
+      width: 420px;
+      height: 420px;
+      transform-style: preserve-3d;
+      transition: transform 0.1s ease-out;
+    }
+    .medal-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 20px 30px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 25px rgba(56, 189, 248, 0.25));
+      border-radius: 24px;
+      pointer-events: none;
+    }
+    .interactive-spinner-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      cursor: pointer;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: box-shadow 0.3s;
+    }
+    .interactive-spinner-overlay:hover {
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.8), inset 0 0 15px rgba(255, 255, 255, 0.3);
+    }
+    .spin-hint {
+      position: absolute;
+      bottom: 12px;
+      padding: 6px 16px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 20px;
+      font-size: 12px;
+      color: #7dd3fc;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      animation: pulse 2s infinite;
+      pointer-events: none;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.8; transform: translateY(0); }
+      50% { opacity: 1; transform: translateY(-3px); }
+    }
+    .controls-panel {
+      width: 100%;
+      padding: 16px 24px;
+      background: rgba(10, 18, 30, 0.85);
+      border-top: 1px solid rgba(56, 189, 248, 0.15);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-group {
+      display: flex;
+      gap: 8px;
+    }
+    button {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #e2e8f0;
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    button:hover {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: #38bdf8;
+      color: #fff;
+    }
+    button.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #fff;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+    }
+    .specs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      width: 100%;
+      max-width: 900px;
+      margin-top: 24px;
+    }
+    .spec-card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(56, 189, 248, 0.15);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .spec-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #38bdf8;
+      margin-bottom: 6px;
+    }
+    .spec-value {
+      font-size: 15px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .spec-desc {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="badge">AQTOBE 2027 • OFFICIAL FINISHER MEDAL</div>
+    <h1>Концепция «Морозный Вихрь» (Frost Vortex Spinner)</h1>
+    <p class="subtitle">Слоган «STAY YOUNG» • Символ города Актобе • Кинетический спиннер • Морозная геометрия</p>
+  </header>
+
+  <div class="container">
+    <div class="viewer-area" id="viewerArea">
+      <div class="medal-stage" id="medalStage">
+        <img class="medal-img" id="medalImage" src="frost_vortex_armandar_oryndalady_perfect_1794229074016.jpg" alt="Медаль Морозный Вихрь Актобе 2027 STAY YOUNG • Армандар орындалады">
+        <!-- Spinner Click / Flick Area -->
+        <div class="interactive-spinner-overlay" id="spinnerHit" title="Кликните или проведите мышью, чтобы раскрутить!"></div>
+      </div>
+      <div class="spin-hint" id="spinHint">
+        <span>🔄</span> Вращайте мышь для 3D наклона • Нажмите на центр, чтобы запустить спиннер
+      </div>
+    </div>
+
+    <div class="controls-panel">
+      <div class="btn-group">
+        <button id="btnFront" class="active">✨ Лицевая: Армандар орындалады</button>
+        <button id="btnReverse">🏅 Реверс (Оборотная сторона)</button>
+      </div>
+      <div class="btn-group">
+        <button id="btnSpin">⚡ Раскрутить Спиннер</button>
+        <button id="btnReset">⟲ Сброс</button>
+      </div>
+      <div class="btn-group">
+        <button id="btnDay" class="active">☀️ Студийный свет</button>
+        <button id="btnNight">🌙 Ночной люминофор</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="specs-grid">
+    <div class="spec-card">
+      <div class="spec-title">Слоган & Имя</div>
+      <div class="spec-value">STAY YOUNG / AQTOBE 2027</div>
+      <div class="spec-desc">Объемный рельеф букв с алмазной полировкой фасок на морозном клинке.</div>
+    </div>
+    <div class="spec-card">
+      <div class="spec-title">Кинетика (Спиннер)</div>
+      <div class="spec-value">Micro-Ball Bearing 360°</div>
+      <div class="spec-desc">Вращающийся центральный диск со спортивным логотипом-тюльпаном (бег, вело, плавание).</div>
+    </div>
+    <div class="spec-card">
+      <div class="spec-title">Металл & Эмали</div>
+      <div class="spec-value">Antique Silver + Cloisonné</div>
+      <div class="spec-desc">Цинковый сплав Zamak, витражная лазурная смола и люминесцентный ночной пигмент.</div>
+    </div>
+    <div class="spec-card">
+      <div class="spec-title">Габариты & Вес</div>
+      <div class="spec-value">88 × 82 мм • ~125 г</div>
+      <div class="spec-desc">Толщина 5 мм. В комплекте брендированная сатиновая лента 35 мм.</div>
+    </div>
+  </div>
+
+  <script>
+    const stage = document.getElementById('medalStage');
+    const viewer = document.getElementById('viewerArea');
+    const spinnerHit = document.getElementById('spinnerHit');
+    const medalImg = document.getElementById('medalImage');
+    const btnSpin = document.getElementById('btnSpin');
+    const btnReset = document.getElementById('btnReset');
+    const btnDay = document.getElementById('btnDay');
+    const btnNight = document.getElementById('btnNight');
+    const btnFront = document.getElementById('btnFront');
+    const btnReverse = document.getElementById('btnReverse');
+
+    btnFront.addEventListener('click', () => {
+      medalImg.src = 'frost_vortex_armandar_oryndalady_perfect_1794229074016.jpg';
+      btnFront.classList.add('active');
+      btnReverse.classList.remove('active');
+      document.getElementById('spinnerHit').style.display = 'flex';
+    });
+
+    btnReverse.addEventListener('click', () => {
+      medalImg.src = 'aqtobe_medal_reverse_side_1794229050863.jpg';
+      btnReverse.classList.add('active');
+      btnFront.classList.remove('active');
+      document.getElementById('spinnerHit').style.display = 'none';
+    });
+
+    let isNight = false;
+    let tiltX = 0, tiltY = 0;
+    let spinAngle = 0;
+    let spinVelocity = 0;
+    let isDragging = false;
+    let startX = 0, startY = 0;
+
+    // Mouse movement for 3D tilt
+    viewer.addEventListener('mousemove', (e) => {
+      const rect = viewer.getBoundingClientRect();
+      const x = e.clientX - rect.left - rect.width / 2;
+      const y = e.clientY - rect.top - rect.height / 2;
+      tiltY = (x / (rect.width / 2)) * 18;
+      tiltX = -(y / (rect.height / 2)) * 18;
+      updateTransform();
+    });
+
+    viewer.addEventListener('mouseleave', () => {
+      tiltX = 0;
+      tiltY = 0;
+      updateTransform();
+    });
+
+    function updateTransform() {
+      stage.style.transform = `rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
+    }
+
+    // Spinner flick physics
+    function flickSpinner(impulse = 35) {
+      spinVelocity = impulse + Math.random() * 10;
+    }
+
+    spinnerHit.addEventListener('click', (e) => {
+      e.stopPropagation();
+      flickSpinner(45);
+    });
+
+    btnSpin.addEventListener('click', () => {
+      flickSpinner(55);
+    });
+
+    btnReset.addEventListener('click', () => {
+      tiltX = 0;
+      tiltY = 0;
+      spinVelocity = 0;
+      updateTransform();
+    });
+
+    // Night Glow Toggle
+    btnNight.addEventListener('click', () => {
+      isNight = true;
+      btnNight.classList.add('active');
+      btnDay.classList.remove('active');
+      medalImg.style.filter = 'drop-shadow(0 0 35px #38bdf8) drop-shadow(0 0 60px #0284c7) hue-rotate(15deg) brightness(1.15) contrast(1.2)';
+      document.body.style.background = '#020617';
+    });
+
+    btnDay.addEventListener('click', () => {
+      isNight = false;
+      btnDay.classList.add('active');
+      btnNight.classList.remove('active');
+      medalImg.style.filter = 'drop-shadow(0 20px 30px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 25px rgba(56, 189, 248, 0.25))';
+      document.body.style.background = 'radial-gradient(circle at 50% 30%, #0d1b2a 0%, #050b14 100%)';
+    });
+
+    // Physics Loop for Spinner
+    function animate() {
+      if (Math.abs(spinVelocity) > 0.05) {
+        spinAngle += spinVelocity;
+        spinVelocity *= 0.985; // friction
+        spinnerHit.style.transform = `translate(-50%, -50%) rotate(${spinAngle}deg)`;
+      }
+      requestAnimationFrame(animate);
+    }
+    animate();
+  </script>
+</body>
+</html>

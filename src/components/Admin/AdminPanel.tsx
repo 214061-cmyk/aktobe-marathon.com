@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import type { MarathonEvent, Distance, Participant, AgeCategory, Sponsor, EventOptionsConfig, ScheduleDay, ScheduleItem, RoutePoint, DocumentKey } from '../../types/marathon';
 import { DocumentsManager } from './DocumentsManager';
+import { NewsletterManager } from './NewsletterManager';
 import { DocumentModal } from '../Legal/DocumentModal';
 import { marathonStorage } from '../../services/marathonStorage';
 import { calculateAge, determineAgeCategory, DEFAULT_ADULT_CATEGORIES, DEFAULT_YOUTH_10K_CATEGORIES, DEFAULT_KIDS_CATEGORIES } from '../../utils/ageUtils';
 import { 
-  LayoutDashboard, Calendar, Route, Users, QrCode, 
+  LayoutDashboard, Calendar, Route, Users, QrCode, Trophy, 
   FileSpreadsheet, FileText, Plus, Trash2, Edit3, 
   Check, X, Search, Filter, ShieldCheck, ArrowLeft, 
   DollarSign, TrendingUp, RefreshCw, Download, ChevronRight,
   MapPin, Clock, Award, AlertCircle, AlertTriangle, CheckCircle2,
   Tag, Layers, Sparkles, ExternalLink, Globe, Shirt, Utensils, Heart, Image as ImageIcon,
-  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive
+  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive, Mail
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -30,7 +31,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [events, setEvents] = useState<MarathonEvent[]>([]);
   const [currentEvent, setCurrentEvent] = useState<MarathonEvent | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents' | 'newsletter'>('overview');
   const [previewDocKey, setPreviewDocKey] = useState<DocumentKey | null>(null);
 
   // Participants Search & Filters
@@ -117,6 +118,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     prizePool: string;
     totalSlots: number;
     status: any;
+    resultsUrl?: string;
     optionsConfig: EventOptionsConfig;
   }>({
     title: '',
@@ -130,6 +132,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     prizePool: '',
     totalSlots: 4500,
     status: 'registration_open',
+    resultsUrl: '',
     optionsConfig: {
       enableTShirt: true,
       tShirtPrice: 0,
@@ -183,6 +186,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newEventCity, setNewEventCity] = useState('');
   const [newEventDate, setNewEventDate] = useState('2026-09-20');
   const [newEventLocation, setNewEventLocation] = useState('');
+  const [savedResultsUrlMsg, setSavedResultsUrlMsg] = useState<string | null>(null);
+
+  const formatExternalUrl = (url: string): string => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const handleQuickSaveResultsUrl = () => {
+    if (!currentEvent) return;
+    const cleanUrl = formatExternalUrl(eventForm.resultsUrl || '');
+    setEventForm(prev => ({ ...prev, resultsUrl: cleanUrl }));
+    marathonStorage.setResultsUrl(cleanUrl, currentEvent.id);
+    setSavedResultsUrlMsg('✓ Ссылка успешно сохранена и активирована на сайте!');
+    setTimeout(() => setSavedResultsUrlMsg(null), 4000);
+  };
 
   const refreshData = () => {
     const allEvents = marathonStorage.getEvents();
@@ -207,6 +227,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         prizePool: curr.prizePool || '',
         totalSlots: curr.totalSlots || 4500,
         status: curr.status || 'registration_open',
+        resultsUrl: curr.resultsUrl || '',
         optionsConfig: curr.optionsConfig ? {
           ...curr.optionsConfig,
           enableStartClusters: Boolean(curr.optionsConfig.enableStartClusters)
@@ -441,6 +462,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     e.preventDefault();
     if (!currentEvent) return;
     const isoDate = eventForm.date.length === 16 ? `${eventForm.date}:00` : eventForm.date;
+    const cleanResultsUrl = eventForm.resultsUrl ? formatExternalUrl(eventForm.resultsUrl) : '';
     const updated: MarathonEvent = {
       ...currentEvent,
       title: eventForm.title.trim(),
@@ -454,9 +476,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       prizePool: eventForm.prizePool.trim(),
       totalSlots: Number(eventForm.totalSlots),
       status: eventForm.status,
-      optionsConfig: eventForm.optionsConfig
+      resultsUrl: cleanResultsUrl || undefined,
+      optionsConfig: {
+        ...(eventForm.optionsConfig || {}),
+        resultsUrl: cleanResultsUrl
+      }
     };
     marathonStorage.saveEvent(updated);
+    if (cleanResultsUrl) {
+      marathonStorage.setResultsUrl(cleanResultsUrl, currentEvent.id);
+    }
     alert('Параметры забега успешно сохранены! Дата старта, опции и настройки обновлены.');
     refreshData();
   };
@@ -1144,6 +1173,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               activeTab === 'documents' ? 'bg-white text-red-600 font-bold' : 'bg-zinc-800 text-zinc-300'
             }`}>
               5
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('newsletter')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'newsletter'
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Mail className="w-4 h-4 text-rose-400" />
+              Email-рассылки & CRM
+            </div>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              activeTab === 'newsletter'
+                ? 'bg-white text-rose-600'
+                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+            }`}>
+              {marathonStorage.getSubscribers().length.toLocaleString('ru-RU')}
             </span>
           </button>
 
@@ -2159,6 +2209,55 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
+                {/* SECTION: RESULTS URL */}
+                <div className="space-y-3 pt-4 border-t border-zinc-800">
+                  <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-red-500" />
+                      Ссылка на результаты забега (MyLaps / Тайминг / Протоколы)
+                    </h4>
+                    {savedResultsUrlMsg && (
+                      <span className="text-xs text-lime-400 font-bold animate-in fade-in">
+                        {savedResultsUrlMsg}
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-3">
+                    <label className="text-zinc-300 font-bold block text-xs">
+                      Прямая ссылка для перехода участников по кнопке «Результаты забега»:
+                    </label>
+                    <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                      <input
+                        type="text"
+                        value={eventForm.resultsUrl || ''}
+                        placeholder="https://results.mylaps.com/... или ссылка на протоколы"
+                        onChange={e => setEventForm({ ...eventForm, resultsUrl: e.target.value })}
+                        className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-lime-400 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleQuickSaveResultsUrl}
+                        className="px-4 py-2.5 bg-lime-400 hover:bg-lime-300 text-black font-black text-xs uppercase rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
+                      >
+                        <Check className="w-3.5 h-3.5 stroke-[3]" /> Сохранить ссылку
+                      </button>
+                      {eventForm.resultsUrl && (
+                        <a
+                          href={formatExternalUrl(eventForm.resultsUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-red-400 rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs whitespace-nowrap"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> Проверить
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-zinc-400">
+                      Когда участники нажимают на кнопку <b>«Результаты забега»</b> в шапке сайта, они сразу переходят по этой ссылке в новой вкладке браузера. Вы можете нажать <b>«Сохранить ссылку»</b> прямо здесь для мгновенного применения.
+                    </p>
+                  </div>
+                </div>
+
                 <button
                   type="submit"
                   className="w-full py-3.5 rounded-xl bg-lime-400 text-black font-black text-xs uppercase tracking-wider hover:bg-lime-300 transition-colors shadow-lg cursor-pointer flex items-center justify-center gap-2"
@@ -2559,6 +2658,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* TAB: LEGAL DOCUMENTS & REGULATIONS */}
           {activeTab === 'documents' && (
             <DocumentsManager onOpenPreview={(key) => setPreviewDocKey(key)} />
+          )}
+
+          {/* TAB: EMAIL NEWSLETTER & ATHLETE CRM */}
+          {activeTab === 'newsletter' && (
+            <NewsletterManager />
           )}
 
         </main>

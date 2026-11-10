@@ -96,6 +96,7 @@ export interface EventOptionsConfig {
   charityFundName?: string; // e.g. "фонд «Бақытты Бала»"
   charityDescription?: string; // e.g. "Средства пойдут на закупку спортивной формы..."
   enableStartClusters?: boolean; // Control start cluster & elite pace selection in registration
+  resultsUrl?: string; // Optional direct results URL for this event
 }
 
 export interface MarathonEvent {
@@ -117,6 +118,7 @@ export interface MarathonEvent {
   schedule: ScheduleDay[];
   sponsors: Sponsor[];
   optionsConfig?: EventOptionsConfig;
+  resultsUrl?: string; // Direct link to external results / protocols (MyLaps, ChronoTrack, etc.)
 }
 
 export interface Participant {
@@ -151,22 +153,27 @@ export interface Participant {
 
 export interface RaceResult {
   id: string;
+  eventId?: string;
+  distanceId?: string;
   bibNumber: string;
   fullName: string;
   name?: string;
   gender: 'M' | 'F' | 'male' | 'female';
   ageGroup: string;
   distanceName: string;
-  chipTime: string; // 02:45:12
+  chipTime: string; // e.g. "00:34:03"
   gunTime: string;
-  avgPace: string; // 3:55 min/km
+  avgPace: string; // e.g. "3:20 мин/км"
   overallPlace: number;
   genderPlace: number;
   categoryPlace: number;
   overallRank?: number;
   genderRank?: number;
   categoryRank?: number;
-  splits: {
+  city?: string;
+  country?: string;
+  team?: string;
+  splits?: Record<string, string> | {
     split10k?: string;
     split21k?: string;
     split30k?: string;
@@ -174,5 +181,54 @@ export interface RaceResult {
     km10?: string;
     km21?: string;
     km30?: string;
+    [key: string]: string | undefined;
   };
+}
+
+export interface NewsletterContact {
+  id: string;
+  email: string;
+  fullName?: string;
+  firstName?: string;
+  name: string;
+  phone?: string;
+  city?: string;
+  source: 'archive_import' | 'website_registration' | 'manual' | string;
+  subscribedAt?: string;
+  createdAt?: string;
+  status?: 'active' | 'unsubscribed';
+  active?: boolean;
+}
+
+export interface EmailTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  bannerImageUrl?: string;
+  badgeText: string;
+  title: string;
+  greetingText?: string;
+  greeting?: string;
+  mainBodyText?: string;
+  body?: string;
+  highlightBoxTitle?: string;
+  highlightBoxText?: string;
+  ctaButtonText: string;
+  ctaButtonUrl: string;
+  footerNote?: string;
+  footerText?: string;
+  updatedAt?: string;
+}
+
+export interface EmailServerConfig {
+  provider: 'resend' | 'smtp' | 'demo';
+  resendApiKey?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpPassword?: string;
+  smtpSecure?: boolean;
+  fromName: string;
+  fromEmail: string;
 }
