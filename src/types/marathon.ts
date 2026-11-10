@@ -117,7 +117,7 @@ export interface MarathonEvent {
   schedule: ScheduleDay[];
   sponsors: Sponsor[];
   optionsConfig?: EventOptionsConfig;
-  diplomaBgUrl?: string; // Custom background image for finisher diplomas
+  resultsUrl?: string; // Direct link to external results / protocols (MyLaps, ChronoTrack, etc.)
 }
 
 export interface Participant {

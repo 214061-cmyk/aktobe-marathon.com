@@ -8,7 +8,6 @@ import { DistancesGrid } from './components/Distances/DistancesGrid';
 import { RouteMap } from './components/Map/RouteMap';
 import { RaceSchedule } from './components/Schedule/RaceSchedule';
 import { ParticipantsList } from './components/Participants/ParticipantsList';
-import { ResultsModal } from './components/Results/ResultsModal';
 import { PaceCalculator } from './components/Tools/PaceCalculator';
 import { Footer } from './components/Layout/Footer';
 import { RegistrationModal } from './components/Registration/RegistrationModal';
@@ -24,9 +23,17 @@ export function App() {
   const [activeEventId, setActiveEventId] = useState('aktobe-2026');
   const [events, setEvents] = useState<MarathonEvent[]>([]);
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
-  const [isResultsOpen, setIsResultsOpen] = useState(false);
   const [selectedDistanceId, setSelectedDistanceId] = useState<string | undefined>();
   const [activeDocumentKey, setActiveDocumentKey] = useState<'regulation' | 'offer' | 'privacy' | 'medical' | 'transfer' | null>(null);
+
+  const handleOpenResults = () => {
+    const url = activeEvent?.resultsUrl || marathonStorage.getResultsUrl(activeEvent?.id);
+    if (url && url.trim()) {
+      window.open(url.trim(), '_blank', 'noopener,noreferrer');
+    } else {
+      alert('Официальные результаты забега будут опубликованы организаторами сразу после финиша.');
+    }
+  };
 
   const loadData = () => {
     const list = marathonStorage.getEvents();
@@ -118,7 +125,8 @@ export function App() {
             setSelectedDistanceId(undefined);
             setIsRegistrationOpen(true);
           }}
-          onOpenResults={() => setIsResultsOpen(true)}
+          onOpenResults={handleOpenResults}
+          resultsUrl={marathonStorage.getResultsUrl()}
         />
 
         {/* Main Off-Season View */}
@@ -126,7 +134,7 @@ export function App() {
           <OffSeasonView
             completedEvents={events}
             sponsors={allSponsors}
-            onOpenResults={() => setIsResultsOpen(true)}
+            onOpenResults={handleOpenResults}
           />
         </main>
 
@@ -134,12 +142,6 @@ export function App() {
         <Footer
           sponsors={allSponsors}
           onOpenDocument={(key) => setActiveDocumentKey(key)}
-        />
-
-        {/* Results & Finisher Diplomas Modal */}
-        <ResultsModal
-          isOpen={isResultsOpen}
-          onClose={() => setIsResultsOpen(false)}
         />
 
         {/* Legal & Regulation Document Modal */}
@@ -161,7 +163,8 @@ export function App() {
           setSelectedDistanceId(undefined);
           setIsRegistrationOpen(true);
         }}
-        onOpenResults={() => setIsResultsOpen(true)}
+        onOpenResults={handleOpenResults}
+        resultsUrl={activeEvent?.resultsUrl || marathonStorage.getResultsUrl(activeEvent?.id)}
       />
 
       {/* Main Public Hero */}
@@ -250,12 +253,6 @@ export function App() {
         onRegistrationSuccess={() => {
           loadData();
         }}
-      />
-
-      {/* Results & Finisher Diplomas Modal Window */}
-      <ResultsModal
-        isOpen={isResultsOpen}
-        onClose={() => setIsResultsOpen(false)}
       />
 
       {/* Legal & Regulation Document Modal */}

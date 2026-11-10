@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { MarathonEvent, Distance, Participant, AgeCategory, Sponsor, EventOptionsConfig, ScheduleDay, ScheduleItem, RoutePoint, DocumentKey } from '../../types/marathon';
 import { DocumentsManager } from './DocumentsManager';
-import { ResultsManager } from './ResultsManager';
 import { DocumentModal } from '../Legal/DocumentModal';
 import { marathonStorage } from '../../services/marathonStorage';
 import { calculateAge, determineAgeCategory, DEFAULT_ADULT_CATEGORIES, DEFAULT_YOUTH_10K_CATEGORIES, DEFAULT_KIDS_CATEGORIES } from '../../utils/ageUtils';
@@ -31,8 +30,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [events, setEvents] = useState<MarathonEvent[]>([]);
   const [currentEvent, setCurrentEvent] = useState<MarathonEvent | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents' | 'results'>('overview');
-  const [resultsCount, setResultsCount] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents'>('overview');
   const [previewDocKey, setPreviewDocKey] = useState<DocumentKey | null>(null);
 
   // Participants Search & Filters
@@ -119,6 +117,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     prizePool: string;
     totalSlots: number;
     status: any;
+    resultsUrl?: string;
     optionsConfig: EventOptionsConfig;
   }>({
     title: '',
@@ -132,6 +131,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     prizePool: '',
     totalSlots: 4500,
     status: 'registration_open',
+    resultsUrl: '',
     optionsConfig: {
       enableTShirt: true,
       tShirtPrice: 0,
@@ -209,6 +209,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         prizePool: curr.prizePool || '',
         totalSlots: curr.totalSlots || 4500,
         status: curr.status || 'registration_open',
+        resultsUrl: curr.resultsUrl || '',
         optionsConfig: curr.optionsConfig ? {
           ...curr.optionsConfig,
           enableStartClusters: Boolean(curr.optionsConfig.enableStartClusters)
@@ -456,6 +457,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       prizePool: eventForm.prizePool.trim(),
       totalSlots: Number(eventForm.totalSlots),
       status: eventForm.status,
+      resultsUrl: eventForm.resultsUrl ? eventForm.resultsUrl.trim() : undefined,
       optionsConfig: eventForm.optionsConfig
     };
     marathonStorage.saveEvent(updated);
@@ -1027,25 +1029,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               activeTab === 'participants' ? 'bg-black text-white' : 'bg-zinc-800 text-zinc-300'
             }`}>
               {totalRunners}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('results')}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-              activeTab === 'results'
-                ? 'bg-amber-400 text-black shadow-lg shadow-amber-400/20'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Trophy className="w-4 h-4" />
-              Результаты и Дипломы
-            </div>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-              activeTab === 'results' ? 'bg-black text-amber-400 font-bold' : 'bg-zinc-800 text-zinc-300'
-            }`}>
-              {resultsCount}
             </span>
           </button>
 
@@ -2180,6 +2163,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
+                {/* SECTION: RESULTS URL */}
+                <div className="space-y-3 pt-4 border-t border-zinc-800">
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2 pb-1 border-b border-zinc-800">
+                    <Trophy className="w-4 h-4 text-red-500" />
+                    Ссылка на результаты забега (MyLaps / Тайминг / Протоколы)
+                  </h4>
+                  <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                    <label className="text-zinc-300 font-bold block text-xs">
+                      Прямая ссылка для перехода участников по кнопке «Результаты забега»:
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={eventForm.resultsUrl || ''}
+                        placeholder="https://results.mylaps.com/... или ссылка на протоколы"
+                        onChange={e => setEventForm({ ...eventForm, resultsUrl: e.target.value })}
+                        className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-lime-400 focus:outline-none"
+                      />
+                      {eventForm.resultsUrl && (
+                        <a
+                          href={eventForm.resultsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-red-400 rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> Проверить
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-zinc-400">
+                      Когда участники нажимают на кнопку <b>«Результаты забега»</b> в шапке сайта, они сразу переходят по этой ссылке в новой вкладке браузера.
+                    </p>
+                  </div>
+                </div>
+
                 <button
                   type="submit"
                   className="w-full py-3.5 rounded-xl bg-lime-400 text-black font-black text-xs uppercase tracking-wider hover:bg-lime-300 transition-colors shadow-lg cursor-pointer flex items-center justify-center gap-2"
@@ -2580,16 +2598,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* TAB: LEGAL DOCUMENTS & REGULATIONS */}
           {activeTab === 'documents' && (
             <DocumentsManager onOpenPreview={(key) => setPreviewDocKey(key)} />
-          )}
-
-          {/* TAB: RACE RESULTS & FINISHER DIPLOMAS */}
-          {activeTab === 'results' && (
-            <ResultsManager
-              activeEvent={currentEvent}
-              onResultsChange={() => {
-                setResultsCount(marathonStorage.getResults(currentEvent.id).length);
-              }}
-            />
           )}
 
         </main>
