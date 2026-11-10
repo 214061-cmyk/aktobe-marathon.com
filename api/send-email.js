@@ -253,19 +253,25 @@ export default async function handler(req, res) {
         const personalizedHtml = html.replace(/\{NAME\}/g, rec.name || 'Атлет');
         const personalizedSubject = subject.replace(/\{NAME\}/g, rec.name || 'Атлет');
         const plainText = htmlToPlainText(personalizedHtml);
+        const isBulk = recipients.length > 1;
+
+        const headers = {
+          'X-Mailer': 'AktobeMarathon/2.0'
+        };
+        if (isBulk) {
+          headers['List-Unsubscribe'] = `<mailto:${fromEmail}?subject=unsubscribe>`;
+          headers['Precedence'] = 'bulk';
+        }
 
         try {
           await transporter.sendMail({
             from: fromHeader,
             to: rec.email,
+            replyTo: fromHeader,
             subject: personalizedSubject,
             html: personalizedHtml,
             text: plainText,
-            headers: {
-              'List-Unsubscribe': `<mailto:${fromEmail}?subject=unsubscribe>`,
-              'Precedence': 'bulk',
-              'X-Mailer': 'AktobeMarathonMailer/2.0'
-            }
+            headers
           });
           sentCount++;
         } catch (err) {
