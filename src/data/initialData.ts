@@ -28,6 +28,7 @@ export const INITIAL_EVENTS: MarathonEvent[] = [
     status: 'registration_open',
     description: 'Масштабный международный забег, сертифицированный AIMS. Быстрая плоская трасса через знаковые проспекты города, поддержка тысяч болельщиков, литые медали финишера и рекордный призовой фонд!',
     bannerImage: 'https://images.unsplash.com/photo-1452626038306-9aae5e071dd3?q=80&w=1600&auto=format&fit=crop',
+    diplomaBgUrl: '/diploma_bg_aqtobe_marathon_1920x1080.jpg',
     prizePool: '15 000 000 ₸',
     totalSlots: 4500,
     centerCoords: [50.2877, 57.1856],

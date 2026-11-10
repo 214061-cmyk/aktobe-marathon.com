@@ -522,7 +522,7 @@ class MarathonStorage {
       if (evt?.diplomaBgUrl) return evt.diplomaBgUrl;
     }
     const globalBg = localStorage.getItem(STORAGE_KEY_DIPLOMA_BG);
-    return globalBg || null;
+    return globalBg || '/diploma_bg_aqtobe_marathon_1920x1080.jpg';
   }
 
   public setDiplomaBgUrl(url: string | null, eventId?: string): void {

@@ -599,6 +599,26 @@ export const ResultsManager: React.FC<ResultsManagerProps> = ({
                 </button>
               </div>
             </div>
+
+            <div className="pt-2 border-t border-zinc-800/60 flex flex-wrap items-center gap-3">
+              <span className="text-xs text-zinc-400 block w-full">Фирменный фон 1920×1080 с официальным логотипом:</span>
+              <a
+                href="/diploma_bg_aqtobe_marathon_1920x1080.jpg"
+                download="diploma_bg_aqtobe_marathon_1920x1080.jpg"
+                className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 border border-zinc-700 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-amber-400" />
+                Скачать макет JPG (1920×1080)
+              </a>
+              <a
+                href="/diploma_bg_aqtobe_marathon_1920x1080.png"
+                download="diploma_bg_aqtobe_marathon_1920x1080.png"
+                className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 border border-zinc-700 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-lime-400" />
+                Скачать макет PNG (1920×1080)
+              </a>
+            </div>
           </div>
         </div>
       </div>

@@ -40,14 +40,16 @@ export async function generateDiplomaDataUrl(
 
   let hasCustomBg = false;
 
-  // 1. Draw custom background if provided
-  if (options.bgUrl) {
+  const bgToUse = options.bgUrl || '/diploma_bg_aqtobe_marathon_1920x1080.jpg';
+
+  // 1. Draw background image
+  if (bgToUse) {
     try {
-      const bgImg = await loadImage(options.bgUrl);
+      const bgImg = await loadImage(bgToUse);
       ctx.drawImage(bgImg, 0, 0, width, height);
       hasCustomBg = true;
     } catch (e) {
-      console.warn('Could not load custom diploma background, falling back to built-in template', e);
+      console.warn('Could not load diploma background, falling back to built-in template', e);
     }
   }
 
