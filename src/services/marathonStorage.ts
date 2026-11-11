@@ -1,5 +1,5 @@
-import type { MarathonEvent, Participant, RaceResult, Distance, DocumentKey, LegalDocument, NewsletterContact, EmailTemplate, EmailServerConfig } from '../types/marathon';
-import { INITIAL_EVENTS, INITIAL_PARTICIPANTS, INITIAL_RESULTS, INITIAL_LEGAL_DOCUMENTS, DEFAULT_EMAIL_TEMPLATES, DEFAULT_EMAIL_SERVER_CONFIG } from '../data/initialData';
+import type { MarathonEvent, Participant, RaceResult, Distance, DocumentKey, LegalDocument, NewsletterContact, EmailTemplate, EmailServerConfig, PromoCode } from '../types/marathon';
+import { INITIAL_EVENTS, INITIAL_PARTICIPANTS, INITIAL_RESULTS, INITIAL_LEGAL_DOCUMENTS, DEFAULT_EMAIL_TEMPLATES, DEFAULT_EMAIL_SERVER_CONFIG, DEFAULT_PROMO_CODES } from '../data/initialData';
 import initialSubscribersRaw from '../data/initialSubscribers.json';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import * as XLSX from 'xlsx';
@@ -11,6 +11,7 @@ const STORAGE_KEY_DOCUMENTS = 'qazaq_run_documents_v2';
 const STORAGE_KEY_SUBSCRIBERS = 'qazaq_run_subscribers_v2';
 const STORAGE_KEY_EMAIL_TEMPLATES = 'qazaq_run_email_templates_v2';
 const STORAGE_KEY_EMAIL_SERVER = 'qazaq_run_email_server_v2';
+const STORAGE_KEY_PROMOCODES = 'qazaq_run_promocodes_v2';
 
 function eventToDb(e: MarathonEvent) {
   return {
@@ -91,6 +92,8 @@ function participantToDb(p: Participant) {
     total_amount: p.totalAmount,
     payment_status: p.paymentStatus || 'paid',
     payment_method: p.paymentMethod || 'kaspi',
+    promocode_used: p.promocodeUsed || null,
+    discount_amount: p.discountAmount || 0,
     registration_date: p.registrationDate,
     checked_in_expo: Boolean(p.checkedInExpo)
   };
@@ -123,6 +126,8 @@ function dbToParticipant(row: any): Participant {
     totalAmount: row.total_amount ?? row.totalAmount,
     paymentStatus: row.payment_status || row.paymentStatus || 'paid',
     paymentMethod: row.payment_method || row.paymentMethod || 'kaspi',
+    promocodeUsed: row.promocode_used || row.promocodeUsed,
+    discountAmount: row.discount_amount || row.discountAmount || 0,
     registrationDate: row.registration_date || row.registrationDate,
     checkedInExpo: row.checked_in_expo ?? row.checkedInExpo
   };
@@ -136,6 +141,7 @@ class MarathonStorage {
   private subscribers: NewsletterContact[] = [];
   private emailTemplates: EmailTemplate[] = [];
   private emailServerConfig: EmailServerConfig = DEFAULT_EMAIL_SERVER_CONFIG;
+  private promoCodes: PromoCode[] = [];
   private isSyncing = false;
 
   constructor() {
@@ -179,6 +185,9 @@ class MarathonStorage {
 
       const storedServer = localStorage.getItem(STORAGE_KEY_EMAIL_SERVER);
       this.emailServerConfig = storedServer ? JSON.parse(storedServer) : DEFAULT_EMAIL_SERVER_CONFIG;
+
+      const storedPromos = localStorage.getItem(STORAGE_KEY_PROMOCODES);
+      this.promoCodes = storedPromos ? JSON.parse(storedPromos) : DEFAULT_PROMO_CODES;
     } catch {
       this.events = INITIAL_EVENTS;
       this.participants = INITIAL_PARTICIPANTS;
@@ -187,6 +196,7 @@ class MarathonStorage {
       this.subscribers = (initialSubscribersRaw as unknown as NewsletterContact[]);
       this.emailTemplates = DEFAULT_EMAIL_TEMPLATES;
       this.emailServerConfig = DEFAULT_EMAIL_SERVER_CONFIG;
+      this.promoCodes = DEFAULT_PROMO_CODES;
     }
 
     // If Supabase SQL is configured, sync in background
@@ -262,6 +272,7 @@ class MarathonStorage {
       localStorage.setItem(STORAGE_KEY_SUBSCRIBERS, JSON.stringify(this.subscribers));
       localStorage.setItem(STORAGE_KEY_EMAIL_TEMPLATES, JSON.stringify(this.emailTemplates));
       localStorage.setItem(STORAGE_KEY_EMAIL_SERVER, JSON.stringify(this.emailServerConfig));
+      localStorage.setItem(STORAGE_KEY_PROMOCODES, JSON.stringify(this.promoCodes));
     } catch (e) {
       console.error('Storage cache error', e);
     }
@@ -651,6 +662,7 @@ class MarathonStorage {
     this.subscribers = (initialSubscribersRaw as unknown as NewsletterContact[]);
     this.emailTemplates = DEFAULT_EMAIL_TEMPLATES;
     this.emailServerConfig = DEFAULT_EMAIL_SERVER_CONFIG;
+    this.promoCodes = DEFAULT_PROMO_CODES;
     this.persist();
   }
 
@@ -787,6 +799,173 @@ class MarathonStorage {
   public saveEmailServerConfig(cfg: EmailServerConfig): void {
     this.emailServerConfig = { ...cfg };
     this.persist();
+  }
+
+  // --- PROMO CODES ---
+  public getPromoCodes(): PromoCode[] {
+    return [...this.promoCodes];
+  }
+
+  public getPromoCodeByCode(rawCode: string): PromoCode | undefined {
+    const code = (rawCode || '').trim().toUpperCase();
+    return this.promoCodes.find(p => p.code.toUpperCase() === code);
+  }
+
+  public savePromoCode(promo: PromoCode): void {
+    const cleanCode = promo.code.trim().toUpperCase();
+    const idx = this.promoCodes.findIndex(p => p.id === promo.id || p.code.toUpperCase() === cleanCode);
+    const updated: PromoCode = {
+      ...promo,
+      code: cleanCode
+    };
+
+    if (idx >= 0) {
+      this.promoCodes[idx] = updated;
+    } else {
+      this.promoCodes.unshift(updated);
+    }
+    this.persist();
+  }
+
+  public deletePromoCode(id: string): void {
+    this.promoCodes = this.promoCodes.filter(p => p.id !== id);
+    this.persist();
+  }
+
+  public togglePromoCodeActive(id: string): void {
+    const idx = this.promoCodes.findIndex(p => p.id === id);
+    if (idx >= 0) {
+      this.promoCodes[idx].active = !this.promoCodes[idx].active;
+      this.persist();
+    }
+  }
+
+  public resetPromoCodes(): void {
+    this.promoCodes = [...DEFAULT_PROMO_CODES];
+    this.persist();
+  }
+
+  public validatePromoCode(
+    rawCode: string, 
+    eventId?: string, 
+    distanceId?: string, 
+    originalAmount: number = 0
+  ): { 
+    valid: boolean; 
+    message: string; 
+    promoCode?: PromoCode; 
+    discountAmount: number; 
+    finalPrice: number;
+    discountLabel: string;
+  } {
+    const code = (rawCode || '').trim().toUpperCase();
+    if (!code) {
+      return { 
+        valid: false, 
+        message: 'Пожалуйста, введите промокод', 
+        discountAmount: 0, 
+        finalPrice: originalAmount, 
+        discountLabel: '' 
+      };
+    }
+
+    const promo = this.promoCodes.find(p => p.code.toUpperCase() === code);
+    if (!promo) {
+      return { 
+        valid: false, 
+        message: `Промокод «${code}» не найден`, 
+        discountAmount: 0, 
+        finalPrice: originalAmount, 
+        discountLabel: '' 
+      };
+    }
+
+    if (!promo.active) {
+      return { 
+        valid: false, 
+        message: `Промокод «${code}» деактивирован организатором`, 
+        discountAmount: 0, 
+        finalPrice: originalAmount, 
+        discountLabel: '' 
+      };
+    }
+
+    if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) {
+      return { 
+        valid: false, 
+        message: `Срок действия промокода «${code}» истек`, 
+        discountAmount: 0, 
+        finalPrice: originalAmount, 
+        discountLabel: '' 
+      };
+    }
+
+    if (promo.maxUses && promo.maxUses > 0 && promo.usedCount >= promo.maxUses) {
+      return { 
+        valid: false, 
+        message: `Лимит использований промокода «${code}» (${promo.maxUses}) исчерпан`, 
+        discountAmount: 0, 
+        finalPrice: originalAmount, 
+        discountLabel: '' 
+      };
+    }
+
+    if (promo.eventId && eventId && promo.eventId !== eventId) {
+      return { 
+        valid: false, 
+        message: 'Этот промокод не применяется к выбранному забегу', 
+        discountAmount: 0, 
+        finalPrice: originalAmount, 
+        discountLabel: '' 
+      };
+    }
+
+    if (promo.distanceId && distanceId && promo.distanceId !== distanceId) {
+      return { 
+        valid: false, 
+        message: 'Этот промокод действует только для другой дистанции', 
+        discountAmount: 0, 
+        finalPrice: originalAmount, 
+        discountLabel: '' 
+      };
+    }
+
+    let discountAmount = 0;
+    let discountLabel = '';
+
+    if (promo.discountType === 'free') {
+      discountAmount = originalAmount;
+      discountLabel = '100% скидка (Бесплатная регистрация)';
+    } else if (promo.discountType === 'percentage') {
+      const pct = Math.min(100, Math.max(1, promo.discountValue));
+      discountAmount = Math.round(originalAmount * (pct / 100));
+      discountLabel = `Скидка ${pct}% (-${discountAmount.toLocaleString('ru-RU')} ₸)`;
+    } else if (promo.discountType === 'fixed') {
+      discountAmount = Math.min(originalAmount, Math.max(0, promo.discountValue));
+      discountLabel = `Скидка -${discountAmount.toLocaleString('ru-RU')} ₸`;
+    }
+
+    const finalPrice = Math.max(0, originalAmount - discountAmount);
+
+    return {
+      valid: true,
+      message: `Промокод «${promo.code}» успешно применен! ${discountLabel}`,
+      promoCode: promo,
+      discountAmount,
+      finalPrice,
+      discountLabel
+    };
+  }
+
+  public usePromoCode(rawCode: string): boolean {
+    const code = (rawCode || '').trim().toUpperCase();
+    const idx = this.promoCodes.findIndex(p => p.code.toUpperCase() === code);
+    if (idx >= 0) {
+      this.promoCodes[idx].usedCount = (this.promoCodes[idx].usedCount || 0) + 1;
+      this.persist();
+      return true;
+    }
+    return false;
   }
 }
 

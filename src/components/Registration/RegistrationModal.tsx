@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { MarathonEvent, TShirtSize, PaymentMethod, Participant } from '../../types/marathon';
+import type { MarathonEvent, TShirtSize, PaymentMethod, Participant, PromoCode } from '../../types/marathon';
 import { DigitalBib } from '../Bib/DigitalBib';
 import { marathonStorage } from '../../services/marathonStorage';
 import { calculateAge, determineAgeCategory } from '../../utils/ageUtils';
@@ -7,7 +7,8 @@ import confetti from 'canvas-confetti';
 import { 
   X, Check, ChevronRight, ChevronLeft, CreditCard, 
   Smartphone, Award, Utensils, Heart, ShieldCheck, Download, 
-  Sparkles, Calendar, MapPin, QrCode, AlertTriangle, CheckCircle2, UserCheck, Lock
+  Sparkles, Calendar, MapPin, QrCode, AlertTriangle, CheckCircle2, UserCheck, Lock,
+  Ticket, Tag, Gift
 } from 'lucide-react';
 
 interface RegistrationModalProps {
@@ -53,10 +54,15 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [isCustomCharity, setIsCustomCharity] = useState(false);
   const [customCharityInput, setCustomCharityInput] = useState('');
 
-  // Step 5
+  // Step 5: Payment & Promo Code
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kaspi');
   const [isProcessing, setIsProcessing] = useState(false);
   const [registeredRunner, setRegisteredRunner] = useState<Participant | null>(null);
+
+  // Promo Code State
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
+  const [promoNotice, setPromoNotice] = useState<{ type: 'success' | 'error' | ''; message: string }>({ type: '', message: '' });
 
   if (!isOpen) return null;
 
@@ -138,12 +144,51 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const isPhoneValid = digitsOnly.length >= 10;
   const isStep2Valid = isFirstNameValid && isLastNameValid && isBirthDateValid && isEmailValid && isPhoneValid;
 
-  // Price Calculation respecting organizer configuration
+  // Price Calculation respecting organizer configuration & Promo Code
   const basePrice = selectedDistance?.price || 0;
   const engravingPrice = (optionsConfig.enableMedalEngraving && medalEngraving) ? optionsConfig.medalEngravingPrice : 0;
   const pastaPrice = (optionsConfig.enablePastaParty && pastaParty) ? optionsConfig.pastaPartyPrice : 0;
   const charityPrice = optionsConfig.enableCharity ? charityContribution : 0;
-  const totalPrice = basePrice + engravingPrice + pastaPrice + charityPrice;
+  const rawSubtotal = basePrice + engravingPrice + pastaPrice;
+
+  let discountAmount = 0;
+  if (appliedPromo) {
+    if (appliedPromo.discountType === 'free') {
+      discountAmount = rawSubtotal; // 100% discount on slot and race package options
+    } else if (appliedPromo.discountType === 'percentage') {
+      const pct = Math.min(100, Math.max(1, appliedPromo.discountValue));
+      discountAmount = Math.round(rawSubtotal * (pct / 100));
+    } else if (appliedPromo.discountType === 'fixed') {
+      discountAmount = Math.min(rawSubtotal, appliedPromo.discountValue);
+    }
+  }
+
+  const finalSlotAmount = Math.max(0, rawSubtotal - discountAmount);
+  const totalPrice = finalSlotAmount + charityPrice;
+  const isFreeRegistration = (appliedPromo?.discountType === 'free' && charityPrice === 0) || (totalPrice === 0);
+
+  const handleApplyPromoCode = () => {
+    if (!promoInput.trim()) return;
+    const result = marathonStorage.validatePromoCode(promoInput, event.id, selectedDistance?.id, rawSubtotal);
+    if (result.valid && result.promoCode) {
+      setAppliedPromo(result.promoCode);
+      setPromoNotice({ type: 'success', message: result.message });
+      if (result.finalPrice === 0 && charityPrice === 0) {
+        setPaymentMethod('promocode');
+      }
+    } else {
+      setPromoNotice({ type: 'error', message: result.message });
+    }
+  };
+
+  const handleRemovePromoCode = () => {
+    setAppliedPromo(null);
+    setPromoInput('');
+    setPromoNotice({ type: '', message: '' });
+    if (paymentMethod === 'promocode') {
+      setPaymentMethod('kaspi');
+    }
+  };
 
   const handleNext = () => {
     if (currentStep === 2) {
@@ -172,6 +217,11 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     setTimeout(() => {
       const bibToAssign = assignedBib || marathonStorage.getNextBibNumber(event.id, selectedDistance.id);
 
+      // Increment promo usage if used
+      if (appliedPromo) {
+        marathonStorage.usePromoCode(appliedPromo.code);
+      }
+
       // Register in Storage with calculated age and ageCategory
       const newRunner = marathonStorage.registerParticipant({
         eventId: event.id,
@@ -197,7 +247,9 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
         charityContribution: optionsConfig.enableCharity ? charityContribution : 0,
         totalAmount: totalPrice,
         paymentStatus: 'paid',
-        paymentMethod
+        paymentMethod: isFreeRegistration ? 'promocode' : paymentMethod,
+        promocodeUsed: appliedPromo ? appliedPromo.code : undefined,
+        discountAmount: discountAmount > 0 ? discountAmount : undefined
       });
 
       setIsProcessing(false);
@@ -856,6 +908,87 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                 </div>
               </div>
 
+              {/* Promo Code Box */}
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase">
+                    <Ticket className="w-3.5 h-3.5 text-red-600" />
+                    Есть промокод от организатора?
+                  </label>
+                  {appliedPromo && (
+                    <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Активен
+                    </span>
+                  )}
+                </div>
+
+                {!appliedPromo ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={promoInput}
+                      onChange={(e) => {
+                        setPromoInput(e.target.value.toUpperCase());
+                        if (promoNotice.type) setPromoNotice({ type: '', message: '' });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleApplyPromoCode();
+                        }
+                      }}
+                      placeholder="Введите код (например: VIPFREE, RUN30)"
+                      className="flex-1 bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 tracking-wider placeholder:text-slate-400 placeholder:font-normal uppercase focus:outline-none focus:border-red-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyPromoCode}
+                      disabled={!promoInput.trim()}
+                      className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-40 cursor-pointer shrink-0"
+                    >
+                      Применить
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 border border-emerald-300">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                        {appliedPromo.discountType === 'free' ? <Gift className="w-4 h-4" /> : <Tag className="w-4 h-4" />}
+                      </div>
+                      <div>
+                        <div className="font-black text-emerald-950 text-xs tracking-wider flex items-center gap-1.5">
+                          {appliedPromo.code}
+                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-200 text-emerald-800 font-bold uppercase">
+                            {appliedPromo.discountType === 'free' ? '100% Free' : `-${appliedPromo.discountValue}%`}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-emerald-700 font-semibold">
+                          {appliedPromo.discountType === 'free'
+                            ? 'Бесплатная регистрация организатора'
+                            : `Скидка: -${discountAmount.toLocaleString('ru-RU')} ₸`}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemovePromoCode}
+                      className="text-xs text-red-600 hover:text-red-700 font-bold px-2.5 py-1.5 rounded-lg hover:bg-red-50 cursor-pointer border border-red-200"
+                    >
+                      Отменить
+                    </button>
+                  </div>
+                )}
+
+                {promoNotice.message && (
+                  <div className={`text-[11px] font-medium flex items-center gap-1.5 pt-0.5 ${
+                    promoNotice.type === 'success' ? 'text-emerald-700' : 'text-red-600'
+                  }`}>
+                    {promoNotice.type === 'success' ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
+                    {promoNotice.message}
+                  </div>
+                )}
+              </div>
+
               {/* Invoice Breakdown */}
               <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs space-y-2">
                 <div className="flex justify-between text-slate-700">
@@ -880,65 +1013,91 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     <b>+{charityContribution.toLocaleString('ru-RU')} ₸</b>
                   </div>
                 )}
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-bold bg-emerald-50/80 -mx-2 px-2 py-1 rounded-lg border border-emerald-200">
+                    <span className="flex items-center gap-1">
+                      <Tag className="w-3.5 h-3.5" /> Скидка по промокоду ({appliedPromo?.code}):
+                    </span>
+                    <span>-{discountAmount.toLocaleString('ru-RU')} ₸</span>
+                  </div>
+                )}
                 <div className="pt-2 border-t border-slate-200 flex justify-between text-sm font-bold text-slate-900">
                   <span>ИТОГО К ОПЛАТЕ:</span>
-                  <span className="text-red-600 font-black text-base">{totalPrice.toLocaleString('ru-RU')} ₸</span>
+                  <span className={`font-black text-base ${isFreeRegistration ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {isFreeRegistration ? '0 ₸ (БЕСПЛАТНО)' : `${totalPrice.toLocaleString('ru-RU')} ₸`}
+                  </span>
                 </div>
               </div>
 
-              {/* Payment Methods */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-600 uppercase">
-                  Выберите способ оплаты:
-                </label>
-
-                {/* Kaspi Pay */}
-                <div
-                  onClick={() => setPaymentMethod('kaspi')}
-                  className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                    paymentMethod === 'kaspi'
-                      ? 'border-red-600 bg-red-50/40'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-[#f14635] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                      Kaspi
-                    </div>
-                    <div>
-                      <div className="font-bold text-slate-900 text-sm">Kaspi Pay / Kaspi QR</div>
-                      <div className="text-[11px] text-slate-500">Быстрая оплата в приложении Kaspi.kz без комиссии</div>
-                    </div>
+              {/* Payment Methods or Free Notification */}
+              {isFreeRegistration ? (
+                <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-500 text-center space-y-2">
+                  <div className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-md">
+                    <Gift className="w-6 h-6" />
                   </div>
-                  <CheckCircle2 className={`w-5 h-5 ${paymentMethod === 'kaspi' ? 'text-red-600' : 'text-slate-300'}`} />
-                </div>
-
-                {/* Bank Card (Visa / Mastercard) */}
-                <div
-                  onClick={() => setPaymentMethod('card')}
-                  className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                    paymentMethod === 'card'
-                      ? 'border-red-600 bg-red-50/40'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
-                      <CreditCard className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-slate-900 text-sm">Банковская карта (Visa / Mastercard)</div>
-                      <div className="text-[11px] text-slate-500">Любые казахстанские и международные карты</div>
-                    </div>
+                  <div>
+                    <h5 className="font-black text-emerald-950 text-sm uppercase tracking-wide">
+                      БЕСПЛАТНАЯ РЕГИСТРАЦИЯ ПО ПРОМОКОДУ «{appliedPromo?.code}»
+                    </h5>
+                    <p className="text-xs text-emerald-700 mt-1 max-w-md mx-auto">
+                      Вам предоставлена 100% скидка организатора. Банковский платеж не требуется. Нажмите кнопку ниже для моментального подтверждения регистрации и закрепления номера!
+                    </p>
                   </div>
-                  <CheckCircle2 className={`w-5 h-5 ${paymentMethod === 'card' ? 'text-red-600' : 'text-slate-300'}`} />
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-600 uppercase">
+                    Выберите способ оплаты:
+                  </label>
 
-              <div className="text-[11px] text-slate-500 flex items-center gap-1.5 pt-1">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                Платеж защищен 256-битным шифрованием по стандарту PCI DSS
-              </div>
+                  {/* Kaspi Pay */}
+                  <div
+                    onClick={() => setPaymentMethod('kaspi')}
+                    className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                      paymentMethod === 'kaspi'
+                        ? 'border-red-600 bg-red-50/40'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-[#f14635] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                        Kaspi
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900 text-sm">Kaspi Pay / Kaspi QR</div>
+                        <div className="text-[11px] text-slate-500">Быстрая оплата в приложении Kaspi.kz без комиссии</div>
+                      </div>
+                    </div>
+                    <CheckCircle2 className={`w-5 h-5 ${paymentMethod === 'kaspi' ? 'text-red-600' : 'text-slate-300'}`} />
+                  </div>
+
+                  {/* Bank Card (Visa / Mastercard) */}
+                  <div
+                    onClick={() => setPaymentMethod('card')}
+                    className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                      paymentMethod === 'card'
+                        ? 'border-red-600 bg-red-50/40'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
+                        <CreditCard className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900 text-sm">Банковская карта (Visa / Mastercard)</div>
+                        <div className="text-[11px] text-slate-500">Любые казахстанские и международные карты</div>
+                      </div>
+                    </div>
+                    <CheckCircle2 className={`w-5 h-5 ${paymentMethod === 'card' ? 'text-red-600' : 'text-slate-300'}`} />
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 pt-1">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    Платеж защищен 256-битным шифрованием по стандарту PCI DSS
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -956,6 +1115,13 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                 <p className="text-xs text-slate-600 max-w-md mx-auto mt-1">
                   Поздравляем! Ваш слот официально подтвержден. Электронный билет с QR-кодом для получения стартового пакета отправлен на <b>{registeredRunner.email}</b>
                 </p>
+                {registeredRunner.promocodeUsed && (
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <Gift className="w-3.5 h-3.5 text-emerald-600" />
+                    Регистрация по промокоду: <span className="font-mono">{registeredRunner.promocodeUsed}</span>
+                    {registeredRunner.paymentMethod === 'promocode' && ' (Бесплатно)'}
+                  </div>
+                )}
               </div>
 
               {/* Final Digital Bib display */}
@@ -1022,10 +1188,19 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                 type="button"
                 disabled={isProcessing}
                 onClick={handleFinishPayment}
-                className="px-8 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-red-600/25 cursor-pointer hover:from-red-500 hover:to-rose-500 flex items-center gap-2 disabled:opacity-50"
+                className={`px-8 py-3 rounded-xl text-white font-black text-xs uppercase tracking-wider shadow-xl cursor-pointer flex items-center gap-2 disabled:opacity-50 transition-all ${
+                  isFreeRegistration
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-600/25'
+                    : 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 shadow-red-600/25'
+                }`}
               >
                 {isProcessing ? (
-                  <span>Обработка платежа...</span>
+                  <span>{isFreeRegistration ? 'Подтверждение слота...' : 'Обработка платежа...'}</span>
+                ) : isFreeRegistration ? (
+                  <>
+                    <Gift className="w-4 h-4 fill-white" />
+                    Завершить бесплатную регистрацию →
+                  </>
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 fill-white" />

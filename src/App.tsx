@@ -43,6 +43,15 @@ export function App() {
   const loadData = () => {
     const list = marathonStorage.getEvents();
     setEvents(list);
+    // Prefer first active event if current selection is invalid or archived
+    setActiveEventId(prev => {
+      const current = list.find(e => e.id === prev);
+      if (!current || current.status === 'completed') {
+        const firstActive = list.find(e => e.status !== 'completed');
+        return firstActive ? firstActive.id : prev;
+      }
+      return prev;
+    });
   };
 
   useEffect(() => {

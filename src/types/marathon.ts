@@ -2,7 +2,7 @@ export type EventStatus = 'registration_open' | 'coming_soon' | 'completed' | 's
 
 export type TShirtSize = 'XS' | 'S' | 'M' | 'L' | 'XL' | 'XXL' | 'NONE';
 
-export type PaymentMethod = 'kaspi' | 'card' | 'apple_pay';
+export type PaymentMethod = 'kaspi' | 'card' | 'apple_pay' | 'promocode';
 
 export type PaymentStatus = 'paid' | 'pending' | 'refunded';
 
@@ -147,8 +147,27 @@ export interface Participant {
   totalAmount: number;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
+  promocodeUsed?: string;
+  discountAmount?: number;
   registrationDate: string;
   checkedInExpo?: boolean;
+}
+
+export type PromoCodeDiscountType = 'free' | 'percentage' | 'fixed';
+
+export interface PromoCode {
+  id: string;
+  code: string; // e.g. "VIP2027", "FREE100" - always uppercase & trimmed
+  discountType: PromoCodeDiscountType; // 'free' (100% off), 'percentage' (% off), 'fixed' (fixed amount off in ₸)
+  discountValue: number; // 100 for 'free', 1-99 for 'percentage', amount in ₸ for 'fixed'
+  eventId?: string; // specific event or all events if empty
+  distanceId?: string; // specific distance or all if empty
+  maxUses?: number; // max usage count, undefined/0 = unlimited
+  usedCount: number;
+  expiresAt?: string; // ISO date string or empty
+  active: boolean;
+  description?: string; // Note for admin (e.g. "Для почетных гостей и спонсоров")
+  createdAt: string;
 }
 
 export interface RaceResult {
