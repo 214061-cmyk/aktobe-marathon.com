@@ -144,7 +144,8 @@ export default async function handler(req, res) {
     }
 
     const fromName = config?.fromName || 'Aqtobe International Marathon';
-    const fromEmail = config?.fromEmail || config?.smtpUser || 'noreply@aktobe-marathon.com';
+    const fromEmail = config?.fromEmail || config?.smtpUser || 'info@aktobe-marathon.kz';
+    const fromEmailDomain = fromEmail.includes('@') ? fromEmail.split('@')[1].trim() : 'aktobe-marathon.kz';
     const fromHeader = `"${fromName}" <${fromEmail}>`;
 
     // 1. RESEND API PROVIDER
@@ -254,12 +255,16 @@ export default async function handler(req, res) {
         const personalizedSubject = subject.replace(/\{NAME\}/g, rec.name || 'Атлет');
         const plainText = htmlToPlainText(personalizedHtml);
         const isBulk = recipients.length > 1;
+        const msgUnique = `${Date.now()}.${Math.random().toString(36).substring(2, 9)}`;
+        const messageId = `<${msgUnique}@${fromEmailDomain}>`;
 
         const headers = {
-          'X-Mailer': 'AktobeMarathon/2.0'
+          'X-Mailer': 'AktobeMarathon Mail Service',
+          'Message-ID': messageId
         };
         if (isBulk) {
-          headers['List-Unsubscribe'] = `<mailto:${fromEmail}?subject=unsubscribe>`;
+          headers['List-Unsubscribe'] = `<mailto:${fromEmail}?subject=unsubscribe>, <https://aktobe-marathoncom.vercel.app/>`;
+          headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
           headers['Precedence'] = 'bulk';
         }
 
@@ -268,6 +273,12 @@ export default async function handler(req, res) {
             from: fromHeader,
             to: rec.email,
             replyTo: fromHeader,
+            envelope: {
+              from: fromEmail,
+              to: rec.email
+            },
+            messageId,
+            date: new Date(),
             subject: personalizedSubject,
             html: personalizedHtml,
             text: plainText,

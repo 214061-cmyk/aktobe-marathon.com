@@ -737,8 +737,8 @@ export const DEFAULT_EMAIL_TEMPLATES: EmailTemplate[] = [
 export const DEFAULT_EMAIL_SERVER_CONFIG: EmailServerConfig = {
   provider: 'demo',
   fromName: 'Aqtobe International Marathon',
-  fromEmail: 'noreply@aktobe-marathon.com',
-  smtpHost: 'smtp.yandex.ru',
+  fromEmail: 'info@aktobe-marathon.kz',
+  smtpHost: 'mail.aktobe-marathon.kz',
   smtpPort: 465,
   smtpSecure: true
 };
