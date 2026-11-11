@@ -1,5 +1,22 @@
 import nodemailer from 'nodemailer';
 
+function htmlToPlainText(html) {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*[\/]?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n\s*\n\s*\n/g, '\n\n')
+    .trim();
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed, use POST' });
@@ -115,7 +132,12 @@ export default async function handler(req, res) {
     if (!recipients && body.to) {
       recipients = [{ email: body.to, name: body.recipientName || 'Участник' }];
     }
-    const subject = body.subject;
+    let subject = (body.subject || '')
+      .replace(/^\[ТЕСТ\]\s*/i, '')
+      .replace(/^\[TEST\]\s*/i, '')
+      .replace(/^ТЕСТ:\s*/i, '')
+      .replace(/^TEST:\s*/i, '')
+      .trim();
     const html = body.html;
 
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
@@ -127,7 +149,8 @@ export default async function handler(req, res) {
     }
 
     const fromName = config?.fromName || 'Aqtobe International Marathon';
-    const fromEmail = config?.fromEmail || config?.smtpUser || 'noreply@aktobe-marathon.com';
+    const fromEmail = config?.fromEmail || config?.smtpUser || 'info@aktobe-marathon.kz';
+    const fromEmailDomain = fromEmail.includes('@') ? fromEmail.split('@')[1].trim() : 'aktobe-marathon.kz';
     const fromHeader = `"${fromName}" <${fromEmail}>`;
 
     // 1. RESEND API PROVIDER
@@ -143,6 +166,7 @@ export default async function handler(req, res) {
       for (const rec of recipients) {
         const personalizedHtml = html.replace(/\{NAME\}/g, rec.name || 'Атлет');
         const personalizedSubject = subject.replace(/\{NAME\}/g, rec.name || 'Атлет');
+        const plainText = htmlToPlainText(personalizedHtml);
 
         try {
           const resp = await fetch('https://api.resend.com/emails', {
@@ -155,7 +179,12 @@ export default async function handler(req, res) {
               from: fromHeader,
               to: [rec.email],
               subject: personalizedSubject,
-              html: personalizedHtml
+              html: personalizedHtml,
+              text: plainText,
+              headers: {
+                'List-Unsubscribe': `<mailto:${fromEmail}?subject=unsubscribe>`,
+                'Precedence': 'bulk'
+              }
             })
           });
 
@@ -229,13 +258,36 @@ export default async function handler(req, res) {
       for (const rec of recipients) {
         const personalizedHtml = html.replace(/\{NAME\}/g, rec.name || 'Атлет');
         const personalizedSubject = subject.replace(/\{NAME\}/g, rec.name || 'Атлет');
+        const plainText = htmlToPlainText(personalizedHtml);
+        const isBulk = recipients.length > 1;
+        const msgUnique = `${Date.now()}.${Math.random().toString(36).substring(2, 9)}`;
+        const messageId = `<${msgUnique}@${fromEmailDomain}>`;
+
+        const headers = {
+          'X-Mailer': 'AktobeMarathon Mail Service',
+          'Message-ID': messageId
+        };
+        if (isBulk) {
+          headers['List-Unsubscribe'] = `<mailto:${fromEmail}?subject=unsubscribe>, <https://aktobe-marathoncom.vercel.app/>`;
+          headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+          headers['Precedence'] = 'bulk';
+        }
 
         try {
           await transporter.sendMail({
             from: fromHeader,
             to: rec.email,
+            replyTo: fromHeader,
+            envelope: {
+              from: fromEmail,
+              to: rec.email
+            },
+            messageId,
+            date: new Date(),
             subject: personalizedSubject,
-            html: personalizedHtml
+            html: personalizedHtml,
+            text: plainText,
+            headers
           });
           sentCount++;
         } catch (err) {
