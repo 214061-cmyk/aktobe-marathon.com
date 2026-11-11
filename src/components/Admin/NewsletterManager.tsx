@@ -222,7 +222,7 @@ export const NewsletterManager: React.FC = () => {
           serverConfig,
           to: testEmailAddress.trim(),
           recipientName: 'Виктор Тестовый',
-          subject: '[ТЕСТ] ' + subject,
+          subject: subject,
           html
         })
       });
