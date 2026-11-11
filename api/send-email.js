@@ -132,7 +132,12 @@ export default async function handler(req, res) {
     if (!recipients && body.to) {
       recipients = [{ email: body.to, name: body.recipientName || 'Участник' }];
     }
-    const subject = body.subject;
+    let subject = (body.subject || '')
+      .replace(/^\[ТЕСТ\]\s*/i, '')
+      .replace(/^\[TEST\]\s*/i, '')
+      .replace(/^ТЕСТ:\s*/i, '')
+      .replace(/^TEST:\s*/i, '')
+      .trim();
     const html = body.html;
 
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {

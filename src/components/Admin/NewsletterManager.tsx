@@ -212,8 +212,8 @@ export const NewsletterManager: React.FC = () => {
     setTestSendStatus({ type: 'loading', message: 'Отправка тестового письма через ' + serverConfig.provider.toUpperCase() + '...' });
     
     try {
-      const html = buildEmailHtml(currentTemplate, 'Виктор Тестовый');
-      const subject = currentTemplate.subject.replace(/\{NAME\}/g, 'Виктор').replace(/\{EVENT_TITLE\}/g, 'Aktobe Marathon 2026');
+      const html = buildEmailHtml(currentTemplate, 'Уважаемый участник');
+      const subject = currentTemplate.subject.replace(/\{NAME\}/g, 'Атлет').replace(/\{EVENT_TITLE\}/g, 'Aktobe Marathon 2026');
 
       const response = await fetch('/api/send-email', {
         method: 'POST',
@@ -221,7 +221,7 @@ export const NewsletterManager: React.FC = () => {
         body: JSON.stringify({
           serverConfig,
           to: testEmailAddress.trim(),
-          recipientName: 'Виктор Тестовый',
+          recipientName: 'Уважаемый участник',
           subject: subject,
           html
         })
