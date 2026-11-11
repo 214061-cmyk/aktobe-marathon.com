@@ -1,4 +1,4 @@
-import type { MarathonEvent, Participant, RaceResult, EventOptionsConfig, DocumentKey, LegalDocument, EmailTemplate, EmailServerConfig } from '../types/marathon';
+import type { MarathonEvent, Participant, RaceResult, EventOptionsConfig, DocumentKey, LegalDocument, EmailTemplate, EmailServerConfig, PromoCode } from '../types/marathon';
 import { DEFAULT_ADULT_CATEGORIES, DEFAULT_YOUTH_10K_CATEGORIES, DEFAULT_KIDS_CATEGORIES } from '../utils/ageUtils';
 
 export const DEFAULT_OPTIONS_CONFIG: EventOptionsConfig = {
@@ -742,3 +742,38 @@ export const DEFAULT_EMAIL_SERVER_CONFIG: EmailServerConfig = {
   smtpPort: 465,
   smtpSecure: true
 };
+
+export const DEFAULT_PROMO_CODES: PromoCode[] = [
+  {
+    id: 'promo-free-vip',
+    code: 'VIPFREE',
+    discountType: 'free',
+    discountValue: 100,
+    usedCount: 0,
+    maxUses: 100,
+    active: true,
+    description: '100% бесплатная регистрация для почетных гостей и VIP-амбассадоров',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'promo-run-30',
+    code: 'RUN30',
+    discountType: 'percentage',
+    discountValue: 30,
+    usedCount: 0,
+    maxUses: 200,
+    active: true,
+    description: 'Скидка 30% для беговых клубов и команд',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'promo-half-50',
+    code: 'AKTOBE50',
+    discountType: 'percentage',
+    discountValue: 50,
+    usedCount: 0,
+    active: true,
+    description: 'Скидка 50% на любой слот забега',
+    createdAt: new Date().toISOString()
+  }
+];

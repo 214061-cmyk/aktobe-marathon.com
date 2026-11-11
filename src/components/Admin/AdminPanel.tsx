@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { MarathonEvent, Distance, Participant, AgeCategory, Sponsor, EventOptionsConfig, ScheduleDay, ScheduleItem, RoutePoint, DocumentKey } from '../../types/marathon';
 import { DocumentsManager } from './DocumentsManager';
 import { NewsletterManager } from './NewsletterManager';
+import { PromoCodesManager } from './PromoCodesManager';
 import { DocumentModal } from '../Legal/DocumentModal';
 import { marathonStorage } from '../../services/marathonStorage';
 import { calculateAge, determineAgeCategory, DEFAULT_ADULT_CATEGORIES, DEFAULT_YOUTH_10K_CATEGORIES, DEFAULT_KIDS_CATEGORIES } from '../../utils/ageUtils';
@@ -12,7 +13,7 @@ import {
   DollarSign, TrendingUp, RefreshCw, Download, ChevronRight,
   MapPin, Clock, Award, AlertCircle, AlertTriangle, CheckCircle2,
   Tag, Layers, Sparkles, ExternalLink, Globe, Shirt, Utensils, Heart, Image as ImageIcon,
-  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive, Mail
+  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive, Mail, Ticket
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -31,7 +32,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [events, setEvents] = useState<MarathonEvent[]>([]);
   const [currentEvent, setCurrentEvent] = useState<MarathonEvent | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents' | 'newsletter'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents' | 'newsletter' | 'promocodes'>('overview');
   const [previewDocKey, setPreviewDocKey] = useState<DocumentKey | null>(null);
 
   // Participants Search & Filters
@@ -254,6 +255,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     window.addEventListener('marathon-storage-update', handleStorageUpdate);
     return () => window.removeEventListener('marathon-storage-update', handleStorageUpdate);
   }, [activeEventId]);
+
+  // Safety: If current event is archived and user is NOT on archive tab, auto-switch to active event
+  useEffect(() => {
+    if (currentEvent && currentEvent.status === 'completed' && activeTab !== 'archive') {
+      const firstActive = events.find(e => e.status !== 'completed');
+      if (firstActive) {
+        onSelectEvent(firstActive.id);
+      }
+    }
+  }, [currentEvent?.status, activeTab, events]);
 
   if (!currentEvent) return null;
 
@@ -945,27 +956,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* Event Selector & Actions */}
         <div className="flex items-center gap-3">
           <select
-            value={currentEvent.id}
+            value={currentEvent.status !== 'completed' ? currentEvent.id : (activeEventsList[0]?.id || currentEvent.id)}
             onChange={(e) => onSelectEvent(e.target.value)}
             className="bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-lime-400"
+            title="Активные забеги на сайте"
           >
-            {activeEventsList.length > 0 && (
-              <optgroup label="Активные на сайте">
-                {activeEventsList.map(ev => (
-                  <option key={ev.id} value={ev.id}>
-                    {ev.title} ({ev.city})
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {archivedEvents.length > 0 && (
-              <optgroup label="Архив / Завершенные">
-                {archivedEvents.map(ev => (
-                  <option key={ev.id} value={ev.id}>
-                    📁 {ev.title} ({ev.city}) [АРХИВ]
-                  </option>
-                ))}
-              </optgroup>
+            {activeEventsList.length > 0 ? (
+              activeEventsList.map(ev => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.title} ({ev.city})
+                </option>
+              ))
+            ) : (
+              <option value={currentEvent.id}>
+                {currentEvent.title} ({currentEvent.city})
+              </option>
             )}
           </select>
 
@@ -1194,6 +1199,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
             }`}>
               {marathonStorage.getSubscribers().length.toLocaleString('ru-RU')}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('promocodes')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'promocodes'
+                ? 'bg-emerald-400 text-black shadow-lg shadow-emerald-400/20'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Ticket className="w-4 h-4 text-emerald-400" />
+              Промокоды и скидки
+            </div>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              activeTab === 'promocodes'
+                ? 'bg-black text-emerald-300'
+                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+            }`}>
+              {marathonStorage.getPromoCodes().filter(p => p.active).length}
             </span>
           </button>
 
@@ -2663,6 +2689,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* TAB: EMAIL NEWSLETTER & ATHLETE CRM */}
           {activeTab === 'newsletter' && (
             <NewsletterManager />
+          )}
+
+          {/* TAB: PROMO CODES */}
+          {activeTab === 'promocodes' && (
+            <PromoCodesManager events={events} />
           )}
 
         </main>
