@@ -54,17 +54,21 @@ export default async function handler(req, res) {
             method: 'GET',
             headers: { Authorization: `Bearer ${apiKey}` }
           });
-          if (checkResp.ok) {
+          const resJson = await checkResp.json().catch(() => ({}));
+
+          // If ok or if key has 'Sending access' permission (restricted to only send emails), it's 100% valid!
+          const isSendingKey = resJson?.message && resJson.message.toLowerCase().includes('restricted to only send emails');
+
+          if (checkResp.ok || isSendingKey) {
             return res.status(200).json({
               success: true,
               provider: 'resend',
-              message: '✅ Соединение с Resend API успешно установлено! Ключ валиден.'
+              message: '✅ Соединение с Resend API успешно установлено! Ключ валиден и готов к отправке писем.'
             });
           } else {
-            const errJson = await checkResp.json().catch(() => ({}));
             return res.status(200).json({
               success: false,
-              error: `Ошибка проверки Resend API: ${errJson.message || checkResp.statusText}`
+              error: `Ошибка проверки Resend API: ${resJson.message || checkResp.statusText}`
             });
           }
         } catch (e) {
