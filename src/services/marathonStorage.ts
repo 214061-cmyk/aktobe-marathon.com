@@ -163,18 +163,15 @@ class MarathonStorage {
       if (storedDocs) {
         try {
           const parsed = JSON.parse(storedDocs);
-          if (Array.isArray(parsed)) {
-            this.documents = parsed;
-          } else if (typeof parsed === 'object' && parsed !== null) {
-            this.documents = Object.values(parsed);
-          } else {
-            this.documents = [...INITIAL_LEGAL_DOCUMENTS];
-          }
+          const rawDocs = Array.isArray(parsed) 
+            ? parsed 
+            : (typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : INITIAL_LEGAL_DOCUMENTS);
+          this.documents = this.sanitizeDocuments(rawDocs);
         } catch {
-          this.documents = [...INITIAL_LEGAL_DOCUMENTS];
+          this.documents = this.sanitizeDocuments(INITIAL_LEGAL_DOCUMENTS);
         }
       } else {
-        this.documents = [...INITIAL_LEGAL_DOCUMENTS];
+        this.documents = this.sanitizeDocuments(INITIAL_LEGAL_DOCUMENTS);
       }
 
       const storedSubs = localStorage.getItem(STORAGE_KEY_SUBSCRIBERS);
@@ -283,6 +280,48 @@ class MarathonStorage {
     window.dispatchEvent(new Event('marathon-storage-update'));
   }
 
+  // Sanitizes and ensures unique IDs and heals corrupted storage
+  private sanitizeDocuments(docs: any[]): LegalDocument[] {
+    if (!Array.isArray(docs) || docs.length === 0) {
+      return INITIAL_LEGAL_DOCUMENTS.map(d => ({ ...d }));
+    }
+
+    const seenIds = new Set<string>();
+    const sanitized: LegalDocument[] = [];
+
+    for (let i = 0; i < docs.length; i++) {
+      const d = docs[i];
+      if (!d || typeof d !== 'object') continue;
+
+      let id = String(d.id || d.key || '').trim();
+      if (!id || seenIds.has(id)) {
+        id = `${d.key || 'doc'}_${i + 1}_${Math.random().toString(36).substring(2, 7)}`;
+      }
+      seenIds.add(id);
+
+      sanitized.push({
+        id,
+        key: d.key || id,
+        title: d.title || `Документ ${i + 1}`,
+        subtitle: d.subtitle,
+        date: d.date,
+        fileUrl: d.fileUrl,
+        fileName: d.fileName,
+        fileSize: d.fileSize,
+        updatedAt: d.updatedAt || new Date().toISOString().split('T')[0]
+      });
+    }
+
+    // Safety: If all documents now have identical titles (corrupted storage from previous bug), restore initial docs!
+    const titles = sanitized.map(d => (d.title || '').trim().toLowerCase()).filter(Boolean);
+    const allSameTitle = titles.length > 1 && titles.every(t => t === titles[0]);
+    if (allSameTitle) {
+      return INITIAL_LEGAL_DOCUMENTS.map(d => ({ ...d }));
+    }
+
+    return sanitized;
+  }
+
   // --- LEGAL DOCUMENTS ---
   public getDocuments(): LegalDocument[] {
     return [...this.documents];
@@ -293,7 +332,10 @@ class MarathonStorage {
   }
 
   public saveDocument(doc: LegalDocument): LegalDocument {
-    const idx = this.documents.findIndex(d => d.id === doc.id || (doc.key && d.key === doc.key));
+    if (!doc.id) {
+      doc.id = `doc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    }
+    const idx = this.documents.findIndex(d => d.id === doc.id);
     if (idx >= 0) {
       this.documents[idx] = { ...this.documents[idx], ...doc };
     } else {
@@ -301,6 +343,12 @@ class MarathonStorage {
     }
     this.persist();
     return doc;
+  }
+
+  public resetDocumentsToDefaults(): LegalDocument[] {
+    this.documents = INITIAL_LEGAL_DOCUMENTS.map(d => ({ ...d }));
+    this.persist();
+    return [...this.documents];
   }
 
   public deleteDocument(idOrKey: string): void {
