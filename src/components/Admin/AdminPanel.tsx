@@ -13,7 +13,7 @@ import {
   DollarSign, TrendingUp, RefreshCw, Download, ChevronRight,
   MapPin, Clock, Award, AlertCircle, AlertTriangle, CheckCircle2,
   Tag, Layers, Sparkles, ExternalLink, Globe, Shirt, Utensils, Heart, Image as ImageIcon,
-  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive, Mail, Ticket
+  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive, Mail, Ticket, Upload
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -3568,22 +3568,107 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div>
-                <label className="text-zinc-400 font-bold block mb-1">
-                  URL логотипа (ссылка на изображение PNG/SVG/WebP)
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="https://example.com/logo.png"
-                    value={sponsorForm.logoUrl}
-                    onChange={e => setSponsorForm({ ...sponsorForm, logoUrl: e.target.value })}
-                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white focus:border-lime-400 focus:outline-none font-mono"
-                  />
-                  <ImageIcon className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-zinc-400 font-bold block">
+                    Логотип спонсора (PNG, SVG, JPG, WebP)
+                  </label>
+                  {sponsorForm.logoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setSponsorForm({ ...sponsorForm, logoUrl: '' })}
+                      className="text-[11px] text-red-400 hover:text-red-300 font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Удалить логотип
+                    </button>
+                  )}
                 </div>
-                <p className="text-[10px] text-zinc-500 mt-1">
-                  Рекомендуется PNG или SVG с прозрачным фоном. Если поле пустое, отображается текстовый логотип.
-                </p>
+
+                <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3">
+                  {/* File Upload from PC / Local Storage */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-lime-400/10 text-lime-400 border border-lime-400/20 flex items-center justify-center shrink-0">
+                        <Upload className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white">Выбрать логотип с компьютера</div>
+                        <div className="text-[10px] text-zinc-400">С жесткого диска или сетевой папки</div>
+                      </div>
+                    </div>
+
+                    <label className="px-3.5 py-2 rounded-xl bg-lime-400 hover:bg-lime-300 text-black font-black text-xs uppercase flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-md shrink-0">
+                      <Upload className="w-3.5 h-3.5" />
+                      Выбрать файл
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml,image/*"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 15 * 1024 * 1024) {
+                              alert('Файл слишком большой. Максимальный размер: 15 МБ.');
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              if (typeof reader.result === 'string') {
+                                setSponsorForm(prev => ({
+                                  ...prev,
+                                  logoUrl: reader.result as string
+                                }));
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* If image is loaded from local storage */}
+                  {sponsorForm.logoUrl?.startsWith('data:') && (
+                    <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/60 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="text-xs font-bold text-emerald-300 truncate">
+                          ✓ Файл успешно загружен из локального хранилища
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 font-mono shrink-0">
+                        Готов к показу
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Or enter direct URL */}
+                  <div className="pt-2 border-t border-zinc-800/80">
+                    <label className="text-[11px] text-zinc-400 font-medium block mb-1">
+                      Или вставьте интернет-ссылку (URL):
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="https://example.com/logo.png"
+                        value={sponsorForm.logoUrl?.startsWith('data:') ? '' : sponsorForm.logoUrl}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val.startsWith('\\\\') || /^[a-zA-Z]:\\/.test(val)) {
+                            alert('Внимание: Браузер блокирует прямые локальные пути вроде \\\\192.25... или C:\\... в целях безопасности.\n\nПожалуйста, нажмите зеленую кнопку «Выбрать файл» выше и выберите ваш файл через проводник!');
+                          }
+                          setSponsorForm({ ...sponsorForm, logoUrl: val });
+                        }}
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white focus:border-lime-400 focus:outline-none font-mono"
+                      />
+                      <ImageIcon className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-zinc-500">
+                    💡 Рекомендуется PNG с прозрачным фоном или векторный SVG.
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -3660,7 +3745,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </span>
                   {sponsorForm.logoUrl ? (
                     <div className="h-10 flex items-center justify-center my-1">
-                      <img src={sponsorForm.logoUrl} alt="Preview" className="max-h-9 max-w-[130px] object-contain" />
+                      <img 
+                        src={sponsorForm.logoUrl} 
+                        alt="Preview" 
+                        className="max-h-9 max-w-[130px] object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.opacity = '0.3';
+                        }}
+                      />
                     </div>
                   ) : (
                     <div
