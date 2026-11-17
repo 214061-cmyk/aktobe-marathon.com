@@ -90,6 +90,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newCategoryMinAge, setNewCategoryMinAge] = useState(18);
   const [newCategoryMaxAge, setNewCategoryMaxAge] = useState(25);
 
+  // Category editing sub-form
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editCategoryForm, setEditCategoryForm] = useState<{
+    name: string;
+    minAge: number;
+    maxAge: number;
+  }>({ name: '', minAge: 18, maxAge: 25 });
+
   // Add Participant Manual Modal State
   const [isAddRunnerOpen, setIsAddRunnerOpen] = useState(false);
   const [newRunnerForm, setNewRunnerForm] = useState({
@@ -298,6 +306,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // --- DISTANCE EDIT HANDLERS ---
   const handleOpenEditDistance = (dist: Distance) => {
+    setEditingCategoryId(null);
     setEditingDistance(dist);
     setDistanceForm({
       name: dist.name,
@@ -434,10 +443,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleRemoveCategoryFromForm = (catId: string) => {
+    if (editingCategoryId === catId) {
+      setEditingCategoryId(null);
+    }
     setDistanceForm(prev => ({
       ...prev,
       ageCategories: prev.ageCategories.filter(c => c.id !== catId)
     }));
+  };
+
+  const handleStartEditCategory = (cat: AgeCategory) => {
+    setEditingCategoryId(cat.id);
+    setEditCategoryForm({
+      name: cat.name,
+      minAge: cat.minAge,
+      maxAge: cat.maxAge
+    });
+  };
+
+  const handleSaveEditCategory = (catId: string) => {
+    if (!editCategoryForm.name.trim()) {
+      alert('Укажите название категории, например "18-25 лет"');
+      return;
+    }
+    setDistanceForm(prev => ({
+      ...prev,
+      ageCategories: prev.ageCategories.map(cat =>
+        cat.id === catId
+          ? {
+              ...cat,
+              name: editCategoryForm.name.trim(),
+              minAge: Number(editCategoryForm.minAge),
+              maxAge: Number(editCategoryForm.maxAge)
+            }
+          : cat
+      )
+    }));
+    setEditingCategoryId(null);
+  };
+
+  const handleCancelEditCategory = () => {
+    setEditingCategoryId(null);
   };
 
   const handleApplyCategoryPreset = (preset: 'adult' | 'youth' | 'kids') => {
@@ -2713,7 +2759,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </h3>
               </div>
               <button
-                onClick={() => setEditingDistance(null)}
+                onClick={() => {
+                  setEditingCategoryId(null);
+                  setEditingDistance(null);
+                }}
                 className="p-1.5 text-zinc-500 hover:text-white rounded-xl hover:bg-zinc-800"
               >
                 <X className="w-5 h-5" />
@@ -3077,25 +3126,110 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   ) : (
                     distanceForm.ageCategories.map(cat => (
-                      <div
-                        key={cat.id}
-                        className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/80 border border-zinc-800"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="w-2 h-2 rounded-full bg-lime-400" />
-                          <span className="font-bold text-white text-xs">{cat.name}</span>
-                          <span className="text-[11px] text-zinc-400 font-mono">
-                            (от {cat.minAge} до {cat.maxAge === 99 ? '99+' : cat.maxAge} лет)
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveCategoryFromForm(cat.id)}
-                          className="p-1 text-zinc-500 hover:text-rose-400 rounded"
+                      editingCategoryId === cat.id ? (
+                        <div
+                          key={cat.id}
+                          className="p-2.5 rounded-xl bg-zinc-900 border border-lime-400/80 shadow-md flex flex-wrap sm:flex-nowrap gap-2 items-center"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                          <input
+                            type="text"
+                            placeholder="Название (напр: 18-25 лет)"
+                            value={editCategoryForm.name}
+                            onChange={e => setEditCategoryForm(prev => ({ ...prev, name: e.target.value }))}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSaveEditCategory(cat.id);
+                              } else if (e.key === 'Escape') {
+                                handleCancelEditCategory();
+                              }
+                            }}
+                            className="flex-1 min-w-[130px] bg-zinc-950 border border-zinc-700 focus:border-lime-400 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                            autoFocus
+                          />
+                          <div className="flex items-center gap-1">
+                            <span className="text-zinc-400 text-[10px]">От:</span>
+                            <input
+                              type="number"
+                              value={editCategoryForm.minAge}
+                              onChange={e => setEditCategoryForm(prev => ({ ...prev, minAge: Number(e.target.value) }))}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveEditCategory(cat.id);
+                                }
+                              }}
+                              className="w-14 bg-zinc-950 border border-zinc-700 focus:border-lime-400 rounded-lg px-1.5 py-1.5 text-xs text-white text-center"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-zinc-400 text-[10px]">До:</span>
+                            <input
+                              type="number"
+                              value={editCategoryForm.maxAge}
+                              onChange={e => setEditCategoryForm(prev => ({ ...prev, maxAge: Number(e.target.value) }))}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveEditCategory(cat.id);
+                                }
+                              }}
+                              className="w-14 bg-zinc-950 border border-zinc-700 focus:border-lime-400 rounded-lg px-1.5 py-1.5 text-xs text-white text-center"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveEditCategory(cat.id)}
+                              className="px-2.5 py-1.5 bg-lime-400 hover:bg-lime-300 text-black font-black text-xs rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Сохранить изменения"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Сохранить</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCancelEditCategory}
+                              className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                              title="Отмена"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          key={cat.id}
+                          className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="w-2 h-2 rounded-full bg-lime-400 shrink-0" />
+                            <span className="font-bold text-white text-xs truncate">{cat.name}</span>
+                            <span className="text-[11px] text-zinc-400 font-mono shrink-0">
+                              (от {cat.minAge} до {cat.maxAge === 99 ? '99+' : cat.maxAge} лет)
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditCategory(cat)}
+                              className="px-2 py-1 text-zinc-400 hover:text-lime-400 hover:bg-zinc-900 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-bold cursor-pointer"
+                              title="Редактировать категорию"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Изменить</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCategoryFromForm(cat.id)}
+                              className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer"
+                              title="Удалить категорию"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )
                     ))
                   )}
 
@@ -3143,7 +3277,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="pt-3 border-t border-zinc-800 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setEditingDistance(null)}
+                  onClick={() => {
+                    setEditingCategoryId(null);
+                    setEditingDistance(null);
+                  }}
                   className="px-5 py-2.5 rounded-xl bg-zinc-900 text-zinc-300 font-bold hover:bg-zinc-800"
                 >
                   Отмена
