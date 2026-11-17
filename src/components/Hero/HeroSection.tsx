@@ -75,14 +75,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   }, [activeMediaTab, runnerPhotos.length]);
 
   return (
-    <div className="relative w-full min-h-[75vh] flex flex-col justify-center items-center text-center px-4 pt-28 pb-12 overflow-hidden bg-gradient-to-b from-slate-100 via-white to-slate-50">
-      
-      {/* Background Graphic Effects & Speed lines */}
-      <div className="absolute inset-0 bg-speed-lines pointer-events-none opacity-60" />
-      <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[450px] bg-red-500/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute top-1/3 -left-40 w-[500px] h-[500px] bg-rose-500/5 rounded-full blur-[150px] pointer-events-none" />
-      <div className="absolute bottom-10 -right-40 w-[500px] h-[500px] bg-red-600/5 rounded-full blur-[150px] pointer-events-none" />
-
+    <div className="relative w-full min-h-[75vh] flex flex-col justify-center items-center text-center px-4 pt-28 pb-12 bg-transparent">
       {/* Hero Content */}
       <div className="relative z-10 max-w-5xl mx-auto flex flex-col items-center">
         

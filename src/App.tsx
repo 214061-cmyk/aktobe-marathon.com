@@ -181,74 +181,84 @@ export function App() {
         resultsUrl={activeEvent?.resultsUrl || marathonStorage.getResultsUrl(activeEvent?.id)}
       />
 
-      {/* Main Public Hero */}
-      <main>
-        <HeroSection
-          event={activeEvent}
-          onRegisterClick={() => {
-            setSelectedDistanceId(undefined);
-            setIsRegistrationOpen(true);
-          }}
-          onExploreMapClick={() => {
-            document.getElementById('map')?.scrollIntoView({ behavior: 'smooth' });
-          }}
-        />
+      {/* Main Public Hero & Content Container (with continuous red-white speed stripes down to Partners & Sponsors) */}
+      <main className="relative overflow-hidden bg-gradient-to-b from-slate-100 via-white to-slate-50">
+        {/* Continuous Background Speed Lines (красно-белый полосатый фон) & Athletic Glows */}
+        <div className="absolute inset-0 bg-speed-lines pointer-events-none opacity-80" />
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[450px] bg-red-500/10 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute top-[18%] -left-40 w-[600px] h-[600px] bg-rose-500/5 rounded-full blur-[160px] pointer-events-none" />
+        <div className="absolute top-[38%] -right-40 w-[600px] h-[600px] bg-red-600/5 rounded-full blur-[160px] pointer-events-none" />
+        <div className="absolute top-[62%] -left-40 w-[600px] h-[600px] bg-rose-500/5 rounded-full blur-[160px] pointer-events-none" />
+        <div className="absolute top-[82%] -right-40 w-[600px] h-[600px] bg-red-600/5 rounded-full blur-[160px] pointer-events-none" />
 
-        {/* Content Container */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-24 py-16">
-          
-          {/* Section 0: All Marathon Events Calendar */}
-          <EventsShowcase
-            events={publicEvents}
-            activeEventId={activeEvent.id}
-            onSelectEvent={(id) => setActiveEventId(id)}
-            onOpenRegistration={(id) => {
-              setActiveEventId(id);
-              setSelectedDistanceId(undefined);
-              setIsRegistrationOpen(true);
-            }}
-          />
-
-          {/* Section 1: Distances & Pricing */}
-          <section id="distances" className="scroll-mt-24">
-            <DistancesGrid
-              distances={activeEvent.distances}
-              eventStatus={activeEvent.status}
-              onSelectDistance={(distId) => {
-                setSelectedDistanceId(distId);
-                setIsRegistrationOpen(true);
-              }}
-            />
-          </section>
-
-          {/* Section 2: Interactive Route Map */}
-          <section id="map" className="scroll-mt-24">
-            <RouteMap
-              distances={activeEvent.distances}
-              centerCoords={activeEvent.centerCoords}
-              city={activeEvent.city}
-            />
-          </section>
-
-          {/* Section 3: Race Weekend Schedule */}
-          <section id="schedule" className="scroll-mt-24">
-            <RaceSchedule schedule={activeEvent.schedule} />
-          </section>
-
-          {/* Section 4: Public Registered Athletes / Start Protocol List */}
-          <ParticipantsList
+        <div className="relative z-10">
+          <HeroSection
             event={activeEvent}
             onRegisterClick={() => {
               setSelectedDistanceId(undefined);
               setIsRegistrationOpen(true);
             }}
+            onExploreMapClick={() => {
+              document.getElementById('map')?.scrollIntoView({ behavior: 'smooth' });
+            }}
           />
 
-          {/* Section 5: Athlete Pace & Splits Calculator */}
-          <section id="calculator" className="scroll-mt-24">
-            <PaceCalculator />
-          </section>
+          {/* Content Container */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-24 py-16">
+            
+            {/* Section 0: All Marathon Events Calendar */}
+            <EventsShowcase
+              events={publicEvents}
+              activeEventId={activeEvent.id}
+              onSelectEvent={(id) => setActiveEventId(id)}
+              onOpenRegistration={(id) => {
+                setActiveEventId(id);
+                setSelectedDistanceId(undefined);
+                setIsRegistrationOpen(true);
+              }}
+            />
 
+            {/* Section 1: Distances & Pricing */}
+            <section id="distances" className="scroll-mt-24">
+              <DistancesGrid
+                distances={activeEvent.distances}
+                eventStatus={activeEvent.status}
+                onSelectDistance={(distId) => {
+                  setSelectedDistanceId(distId);
+                  setIsRegistrationOpen(true);
+                }}
+              />
+            </section>
+
+            {/* Section 2: Interactive Route Map */}
+            <section id="map" className="scroll-mt-24">
+              <RouteMap
+                distances={activeEvent.distances}
+                centerCoords={activeEvent.centerCoords}
+                city={activeEvent.city}
+              />
+            </section>
+
+            {/* Section 3: Race Weekend Schedule */}
+            <section id="schedule" className="scroll-mt-24">
+              <RaceSchedule schedule={activeEvent.schedule} />
+            </section>
+
+            {/* Section 4: Public Registered Athletes / Start Protocol List */}
+            <ParticipantsList
+              event={activeEvent}
+              onRegisterClick={() => {
+                setSelectedDistanceId(undefined);
+                setIsRegistrationOpen(true);
+              }}
+            />
+
+            {/* Section 5: Athlete Pace & Splits Calculator */}
+            <section id="calculator" className="scroll-mt-24">
+              <PaceCalculator />
+            </section>
+
+          </div>
         </div>
       </main>
 

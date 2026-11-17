@@ -67,8 +67,8 @@ body {
 .bg-speed-lines {
   background-image: repeating-linear-gradient(
     -45deg,
-    rgba(220, 38, 38, 0.025),
-    rgba(220, 38, 38, 0.025) 10px,
+    rgba(220, 38, 38, 0.035),
+    rgba(220, 38, 38, 0.035) 10px,
     transparent 10px,
     transparent 20px
   );
