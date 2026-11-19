@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { MarathonEvent, Distance, Participant, AgeCategory, Sponsor, EventOptionsConfig, ScheduleDay, ScheduleItem, RoutePoint, DocumentKey, BlacklistEntry } from '../../types/marathon';
+import type { MarathonEvent, Distance, Participant, AgeCategory, Sponsor, EventOptionsConfig, ScheduleDay, ScheduleItem, RoutePoint, DocumentKey, BlacklistEntry, NewsletterContact } from '../../types/marathon';
 import { DocumentsManager } from './DocumentsManager';
 import { NewsletterManager } from './NewsletterManager';
 import { PromoCodesManager } from './PromoCodesManager';
@@ -993,6 +993,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         adminNotes: ''
       });
     }
+    setIsBanModalOpen(true);
+  };
+
+  const handleOpenBanFromContact = (contact: NewsletterContact) => {
+    const oneYearStr = calculateBlockedUntilDate('1 year');
+    const rawName = (contact.name || contact.fullName || '').trim();
+    const parts = rawName.split(/\s+/).filter(Boolean);
+    const lastName = parts.length >= 2 ? parts[0] : (parts[0] || '');
+    const firstName = parts.length >= 2 ? parts.slice(1).join(' ') : (parts[0] || '');
+
+    const matchedRunner = marathonStorage.getParticipants().find(
+      p => (contact.email && p.email.toLowerCase() === contact.email.toLowerCase()) ||
+           (contact.phone && p.phone && marathonStorage.cleanPhoneDigits(p.phone) === marathonStorage.cleanPhoneDigits(contact.phone))
+    );
+
+    setEditingBanEntry(null);
+    setBanForm({
+      firstName,
+      lastName,
+      birthDate: matchedRunner?.birthDate || '',
+      email: contact.email || '',
+      phone: contact.phone || '',
+      reasonPreset: 'Неспортивное поведение / нарушение регламента забега',
+      reasonCustom: '',
+      durationPreset: '1 year',
+      blockedUntil: oneYearStr,
+      publicMessage: `Регистрация ограничена решением оргкомитета забега до ${new Date(oneYearStr).toLocaleDateString('ru-RU')}. По вопросам: info@aktobe-marathon.kz`,
+      adminNotes: `Добавлен из центра Email-рассылок (Источник: ${contact.source || 'База'})`
+    });
     setIsBanModalOpen(true);
   };
 
@@ -2962,7 +2991,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           {/* TAB: EMAIL NEWSLETTER & ATHLETE CRM */}
           {activeTab === 'newsletter' && (
-            <NewsletterManager />
+            <NewsletterManager onBanContact={handleOpenBanFromContact} />
           )}
 
           {/* TAB: PROMO CODES */}

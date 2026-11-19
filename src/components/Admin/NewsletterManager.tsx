@@ -9,7 +9,11 @@ import type { NewsletterContact, EmailTemplate, EmailServerConfig } from '../../
 import { buildEmailHtml } from '../../utils/emailHtmlBuilder';
 import * as XLSX from 'xlsx';
 
-export const NewsletterManager: React.FC = () => {
+interface NewsletterManagerProps {
+  onBanContact?: (contact: NewsletterContact) => void;
+}
+
+export const NewsletterManager: React.FC<NewsletterManagerProps> = ({ onBanContact }) => {
   const [activeTab, setActiveTab] = useState<'templates' | 'subscribers' | 'server'>('templates');
   
   // Data state
@@ -1019,11 +1023,17 @@ export const NewsletterManager: React.FC = () => {
                   ) : (
                     paginatedSubscribers.map((item, idx) => {
                       const absoluteIndex = (page - 1) * itemsPerPage + idx + 1;
+                      const blStatus = marathonStorage.checkBlacklist({ email: item.email, phone: item.phone });
                       return (
                         <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
                           <td className="py-3 px-4 text-slate-500 font-mono">{absoluteIndex}</td>
                           <td className="py-3 px-4 font-semibold text-white">
                             {item.name || item.fullName || '—'}
+                            {blStatus.blocked && (
+                              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                <ShieldAlert className="w-2.5 h-2.5" /> В черном списке
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-1.5">
@@ -1058,7 +1068,17 @@ export const NewsletterManager: React.FC = () => {
                               {item.source}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-right">
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            {onBanContact && (
+                              <button
+                                type="button"
+                                onClick={() => onBanContact(item)}
+                                className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/20 transition-colors mr-1 cursor-pointer"
+                                title="В черный список (Заблокировать регистрацию)"
+                              >
+                                <ShieldAlert className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             <button
                               onClick={() => {
                                 if (confirm(`Удалить контакт ${item.email}?`)) {
