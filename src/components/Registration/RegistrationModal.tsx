@@ -8,7 +8,7 @@ import {
   X, Check, ChevronRight, ChevronLeft, CreditCard, 
   Smartphone, Award, Utensils, Heart, ShieldCheck, Download, 
   Sparkles, Calendar, MapPin, QrCode, AlertTriangle, CheckCircle2, UserCheck, Lock,
-  Ticket, Tag, Gift
+  Ticket, Tag, Gift, ShieldAlert
 } from 'lucide-react';
 
 interface RegistrationModalProps {
@@ -63,6 +63,9 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const [promoInput, setPromoInput] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
   const [promoNotice, setPromoNotice] = useState<{ type: 'success' | 'error' | ''; message: string }>({ type: '', message: '' });
+
+  // Blacklist Security State
+  const [blacklistError, setBlacklistError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -196,6 +199,21 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
       if (!isStep2Valid) {
         return;
       }
+
+      // Check Blacklist
+      const blCheck = marathonStorage.checkBlacklist({
+        email,
+        phone,
+        firstName,
+        lastName,
+        birthDate
+      });
+      if (blCheck.blocked) {
+        setBlacklistError(blCheck.reason || 'Регистрация ограничена оргкомитетом');
+        return;
+      } else {
+        setBlacklistError(null);
+      }
     }
 
     if (currentStep === 3) {
@@ -212,6 +230,20 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   };
 
   const handleFinishPayment = () => {
+    // Additional security guard against race condition or bypassing
+    const blCheck = marathonStorage.checkBlacklist({
+      email,
+      phone,
+      firstName,
+      lastName,
+      birthDate
+    });
+    if (blCheck.blocked) {
+      setBlacklistError(blCheck.reason || 'Регистрация ограничена оргкомитетом');
+      setCurrentStep(2);
+      return;
+    }
+
     setIsProcessing(true);
 
     setTimeout(() => {
@@ -450,6 +482,26 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                   <span className="text-slate-500 font-mono">
                     Возраст: <b>{runnerAge} лет</b>
                   </span>
+                </div>
+              )}
+
+              {/* Blacklist Restriction Alert */}
+              {blacklistError && (
+                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-300 text-rose-900 flex items-start gap-3 shadow-md animate-in fade-in">
+                  <div className="w-8 h-8 rounded-xl bg-rose-100 border border-rose-300 text-rose-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <ShieldAlert className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs space-y-1">
+                    <div className="font-black text-rose-700 uppercase tracking-wide flex items-center gap-1.5">
+                      <span>Регистрация заблокирована</span>
+                    </div>
+                    <p className="text-slate-800 font-medium leading-relaxed">
+                      {blacklistError}
+                    </p>
+                    <div className="text-[11px] text-slate-500 pt-1.5 border-t border-rose-200">
+                      По вопросам ограничений и апелляций обращайтесь в судейский оргкомитет: <a href="mailto:info@aktobe-marathon.kz" className="text-rose-600 font-bold underline">info@aktobe-marathon.kz</a>
+                    </div>
+                  </div>
                 </div>
               )}
 

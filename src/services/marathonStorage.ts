@@ -1,4 +1,4 @@
-import type { MarathonEvent, Participant, RaceResult, Distance, DocumentKey, LegalDocument, NewsletterContact, EmailTemplate, EmailServerConfig, PromoCode } from '../types/marathon';
+import type { MarathonEvent, Participant, RaceResult, Distance, DocumentKey, LegalDocument, NewsletterContact, EmailTemplate, EmailServerConfig, PromoCode, BlacklistEntry } from '../types/marathon';
 import { INITIAL_EVENTS, INITIAL_PARTICIPANTS, INITIAL_RESULTS, INITIAL_LEGAL_DOCUMENTS, DEFAULT_EMAIL_TEMPLATES, DEFAULT_EMAIL_SERVER_CONFIG, DEFAULT_PROMO_CODES } from '../data/initialData';
 import initialSubscribersRaw from '../data/initialSubscribers.json';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
@@ -12,6 +12,7 @@ const STORAGE_KEY_SUBSCRIBERS = 'qazaq_run_subscribers_v2';
 const STORAGE_KEY_EMAIL_TEMPLATES = 'qazaq_run_email_templates_v2';
 const STORAGE_KEY_EMAIL_SERVER = 'qazaq_run_email_server_v2';
 const STORAGE_KEY_PROMOCODES = 'qazaq_run_promocodes_v2';
+const STORAGE_KEY_BLACKLIST = 'qazaq_run_blacklist_v1';
 
 function eventToDb(e: MarathonEvent) {
   return {
@@ -142,6 +143,7 @@ class MarathonStorage {
   private emailTemplates: EmailTemplate[] = [];
   private emailServerConfig: EmailServerConfig = DEFAULT_EMAIL_SERVER_CONFIG;
   private promoCodes: PromoCode[] = [];
+  private blacklist: BlacklistEntry[] = [];
   private isSyncing = false;
 
   constructor() {
@@ -185,6 +187,9 @@ class MarathonStorage {
 
       const storedPromos = localStorage.getItem(STORAGE_KEY_PROMOCODES);
       this.promoCodes = storedPromos ? JSON.parse(storedPromos) : DEFAULT_PROMO_CODES;
+
+      const storedBlacklist = localStorage.getItem(STORAGE_KEY_BLACKLIST);
+      this.blacklist = storedBlacklist ? JSON.parse(storedBlacklist) : [];
     } catch {
       this.events = INITIAL_EVENTS;
       this.participants = INITIAL_PARTICIPANTS;
@@ -194,6 +199,7 @@ class MarathonStorage {
       this.emailTemplates = DEFAULT_EMAIL_TEMPLATES;
       this.emailServerConfig = DEFAULT_EMAIL_SERVER_CONFIG;
       this.promoCodes = DEFAULT_PROMO_CODES;
+      this.blacklist = [];
     }
 
     // If Supabase SQL is configured, sync in background
@@ -270,6 +276,7 @@ class MarathonStorage {
       localStorage.setItem(STORAGE_KEY_EMAIL_TEMPLATES, JSON.stringify(this.emailTemplates));
       localStorage.setItem(STORAGE_KEY_EMAIL_SERVER, JSON.stringify(this.emailServerConfig));
       localStorage.setItem(STORAGE_KEY_PROMOCODES, JSON.stringify(this.promoCodes));
+      localStorage.setItem(STORAGE_KEY_BLACKLIST, JSON.stringify(this.blacklist));
     } catch (e) {
       console.error('Storage cache error', e);
     }
@@ -1014,6 +1021,144 @@ class MarathonStorage {
       return true;
     }
     return false;
+  }
+
+  // --- BLACKLIST MANAGEMENT ---
+  public cleanPhoneDigits(phone?: string): string {
+    if (!phone) return '';
+    let digits = phone.replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('8')) {
+      digits = '7' + digits.substring(1);
+    }
+    return digits;
+  }
+
+  public getBlacklist(): BlacklistEntry[] {
+    return [...this.blacklist];
+  }
+
+  public addToBlacklist(entry: Omit<BlacklistEntry, 'id' | 'createdAt' | 'normalizedPhone'>): BlacklistEntry {
+    const cleanPhone = this.cleanPhoneDigits(entry.phone);
+    const newEntry: BlacklistEntry = {
+      ...entry,
+      id: 'bl-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      normalizedPhone: cleanPhone,
+      createdAt: new Date().toISOString()
+    };
+    this.blacklist.unshift(newEntry);
+    this.persist();
+    return newEntry;
+  }
+
+  public updateBlacklistEntry(entry: BlacklistEntry): BlacklistEntry {
+    const cleanPhone = this.cleanPhoneDigits(entry.phone);
+    const idx = this.blacklist.findIndex(b => b.id === entry.id);
+    if (idx >= 0) {
+      this.blacklist[idx] = {
+        ...entry,
+        normalizedPhone: cleanPhone
+      };
+      this.persist();
+    }
+    return entry;
+  }
+
+  public removeFromBlacklist(id: string): void {
+    this.blacklist = this.blacklist.filter(b => b.id !== id);
+    this.persist();
+  }
+
+  public checkBlacklist(data: {
+    email?: string;
+    phone?: string;
+    firstName?: string;
+    lastName?: string;
+    birthDate?: string;
+  }): { blocked: boolean; entry?: BlacklistEntry; reason?: string } {
+    if (!this.blacklist || this.blacklist.length === 0) {
+      return { blocked: false };
+    }
+
+    const inputPhone = this.cleanPhoneDigits(data.phone);
+    const inputEmail = (data.email || '').trim().toLowerCase();
+    const inputFirst = (data.firstName || '').trim().toLowerCase();
+    const inputLast = (data.lastName || '').trim().toLowerCase();
+    const inputBirth = (data.birthDate || '').trim();
+
+    const now = Date.now();
+
+    for (const item of this.blacklist) {
+      if (!item.active) continue;
+
+      // Check if temporary block has expired
+      if (!item.isPermanent && item.blockedUntil) {
+        const untilTime = new Date(item.blockedUntil).getTime();
+        if (!isNaN(untilTime) && untilTime < now) {
+          continue;
+        }
+      }
+
+      let matched = false;
+
+      // 1. Phone match
+      if (inputPhone && item.normalizedPhone && inputPhone.length >= 10 && item.normalizedPhone.length >= 10) {
+        if (inputPhone === item.normalizedPhone || 
+            inputPhone.endsWith(item.normalizedPhone.slice(-10)) || 
+            item.normalizedPhone.endsWith(inputPhone.slice(-10))) {
+          matched = true;
+        }
+      }
+
+      // 2. Email match
+      if (!matched && inputEmail && item.email) {
+        const itemEmail = item.email.trim().toLowerCase();
+        if (inputEmail === itemEmail) {
+          matched = true;
+        }
+      }
+
+      // 3. Full Name + BirthDate match
+      if (!matched && inputFirst && inputLast) {
+        const itemFirst = (item.firstName || '').trim().toLowerCase();
+        const itemLast = (item.lastName || '').trim().toLowerCase();
+
+        const nameMatches = (inputFirst === itemFirst && inputLast === itemLast) ||
+                            (inputFirst === itemLast && inputLast === itemFirst);
+
+        if (nameMatches) {
+          if (inputBirth && item.birthDate) {
+            if (inputBirth === item.birthDate.trim()) {
+              matched = true;
+            }
+          } else {
+            matched = true;
+          }
+        }
+      }
+
+      if (matched) {
+        let defaultMsg = 'Регистрация ограничена решением оргкомитета забега';
+        if (item.isPermanent) {
+          defaultMsg += ' (Бессрочно)';
+        } else if (item.blockedUntil) {
+          try {
+            const d = new Date(item.blockedUntil);
+            const dStr = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+            defaultMsg += ` до ${dStr}`;
+          } catch {
+            defaultMsg += ` до ${item.blockedUntil}`;
+          }
+        }
+
+        return {
+          blocked: true,
+          entry: item,
+          reason: item.publicMessage || defaultMsg
+        };
+      }
+    }
+
+    return { blocked: false };
   }
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { MarathonEvent, Distance, Participant, AgeCategory, Sponsor, EventOptionsConfig, ScheduleDay, ScheduleItem, RoutePoint, DocumentKey } from '../../types/marathon';
+import type { MarathonEvent, Distance, Participant, AgeCategory, Sponsor, EventOptionsConfig, ScheduleDay, ScheduleItem, RoutePoint, DocumentKey, BlacklistEntry } from '../../types/marathon';
 import { DocumentsManager } from './DocumentsManager';
 import { NewsletterManager } from './NewsletterManager';
 import { PromoCodesManager } from './PromoCodesManager';
@@ -13,7 +13,8 @@ import {
   DollarSign, TrendingUp, RefreshCw, Download, ChevronRight,
   MapPin, Clock, Award, AlertCircle, AlertTriangle, CheckCircle2,
   Tag, Layers, Sparkles, ExternalLink, Globe, Shirt, Utensils, Heart, Image as ImageIcon,
-  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive, Mail, Ticket, Upload
+  CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive, Mail, Ticket, Upload,
+  ShieldAlert, Ban, UserX
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -32,7 +33,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [events, setEvents] = useState<MarathonEvent[]>([]);
   const [currentEvent, setCurrentEvent] = useState<MarathonEvent | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents' | 'newsletter' | 'promocodes'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'distances' | 'schedule' | 'sponsors' | 'participants' | 'expo' | 'archive' | 'documents' | 'newsletter' | 'promocodes' | 'blacklist'>('overview');
   const [previewDocKey, setPreviewDocKey] = useState<DocumentKey | null>(null);
 
   // Participants Search & Filters
@@ -97,6 +98,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     minAge: number;
     maxAge: number;
   }>({ name: '', minAge: 18, maxAge: 25 });
+
+  // Blacklist Management State
+  const [blacklist, setBlacklist] = useState<BlacklistEntry[]>(() => marathonStorage.getBlacklist());
+  const [blacklistSearch, setBlacklistSearch] = useState('');
+  const [isBanModalOpen, setIsBanModalOpen] = useState(false);
+  const [editingBanEntry, setEditingBanEntry] = useState<BlacklistEntry | null>(null);
+  const [banForm, setBanForm] = useState({
+    firstName: '',
+    lastName: '',
+    birthDate: '',
+    email: '',
+    phone: '',
+    reasonPreset: 'Неспортивное поведение / нарушение регламента забега',
+    reasonCustom: '',
+    durationPreset: '1 year' as '3 months' | '6 months' | '1 year' | '2 years' | 'permanent' | 'custom',
+    blockedUntil: '',
+    publicMessage: '',
+    adminNotes: ''
+  });
 
   // Add Participant Manual Modal State
   const [isAddRunnerOpen, setIsAddRunnerOpen] = useState(false);
@@ -216,6 +236,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const refreshData = () => {
     const allEvents = marathonStorage.getEvents();
     setEvents(allEvents);
+    setBlacklist(marathonStorage.getBlacklist());
     const curr = allEvents.find(e => e.id === activeEventId) || allEvents[0];
     setCurrentEvent(curr);
     if (curr) {
@@ -928,6 +949,155 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  // --- BLACKLIST MANAGEMENT HANDLERS ---
+  const calculateBlockedUntilDate = (preset: '3 months' | '6 months' | '1 year' | '2 years' | 'permanent' | 'custom'): string => {
+    if (preset === 'permanent') return '';
+    const d = new Date();
+    if (preset === '3 months') d.setMonth(d.getMonth() + 3);
+    else if (preset === '6 months') d.setMonth(d.getMonth() + 6);
+    else if (preset === '1 year') d.setFullYear(d.getFullYear() + 1);
+    else if (preset === '2 years') d.setFullYear(d.getFullYear() + 2);
+    return d.toISOString().split('T')[0];
+  };
+
+  const handleOpenBanModal = (runner?: Participant) => {
+    const oneYearStr = calculateBlockedUntilDate('1 year');
+    if (runner) {
+      setEditingBanEntry(null);
+      setBanForm({
+        firstName: runner.firstName || '',
+        lastName: runner.lastName || '',
+        birthDate: runner.birthDate || '',
+        email: runner.email || '',
+        phone: runner.phone || '',
+        reasonPreset: 'Неспортивное поведение / нарушение регламента забега',
+        reasonCustom: '',
+        durationPreset: '1 year',
+        blockedUntil: oneYearStr,
+        publicMessage: `Регистрация ограничена решением оргкомитета забега до ${new Date(oneYearStr).toLocaleDateString('ru-RU')}. По вопросам: info@aktobe-marathon.kz`,
+        adminNotes: `Добавлен из базы участников: Bib ${runner.bibNumber}, забег «${currentEvent.title}»`
+      });
+    } else {
+      setEditingBanEntry(null);
+      setBanForm({
+        firstName: '',
+        lastName: '',
+        birthDate: '',
+        email: '',
+        phone: '',
+        reasonPreset: 'Неспортивное поведение / нарушение регламента забега',
+        reasonCustom: '',
+        durationPreset: '1 year',
+        blockedUntil: oneYearStr,
+        publicMessage: `Регистрация ограничена решением оргкомитета забега до ${new Date(oneYearStr).toLocaleDateString('ru-RU')}. По вопросам: info@aktobe-marathon.kz`,
+        adminNotes: ''
+      });
+    }
+    setIsBanModalOpen(true);
+  };
+
+  const handleEditBanModal = (entry: BlacklistEntry) => {
+    setEditingBanEntry(entry);
+    setBanForm({
+      firstName: entry.firstName || '',
+      lastName: entry.lastName || '',
+      birthDate: entry.birthDate || '',
+      email: entry.email || '',
+      phone: entry.phone || '',
+      reasonPreset: 'Другая причина',
+      reasonCustom: entry.reason || '',
+      durationPreset: entry.isPermanent ? 'permanent' : 'custom',
+      blockedUntil: entry.blockedUntil || '',
+      publicMessage: entry.publicMessage || '',
+      adminNotes: entry.adminNotes || ''
+    });
+    setIsBanModalOpen(true);
+  };
+
+  const handleDurationPresetChange = (preset: '3 months' | '6 months' | '1 year' | '2 years' | 'permanent' | 'custom') => {
+    const newDate = calculateBlockedUntilDate(preset);
+    let publicMsg = 'Регистрация ограничена решением оргкомитета забега';
+    if (preset === 'permanent') {
+      publicMsg += ' (Бессрочно). По вопросам: info@aktobe-marathon.kz';
+    } else if (newDate) {
+      publicMsg += ` до ${new Date(newDate).toLocaleDateString('ru-RU')}. По вопросам: info@aktobe-marathon.kz`;
+    }
+
+    setBanForm(prev => ({
+      ...prev,
+      durationPreset: preset,
+      blockedUntil: newDate,
+      publicMessage: publicMsg
+    }));
+  };
+
+  const handleSaveBan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!banForm.firstName.trim() || !banForm.lastName.trim()) {
+      alert('Укажите имя и фамилию атлета');
+      return;
+    }
+
+    const finalReason = banForm.reasonPreset === 'Другая причина'
+      ? (banForm.reasonCustom.trim() || 'Нарушение регламента забега')
+      : (banForm.reasonCustom.trim() ? `${banForm.reasonPreset} (${banForm.reasonCustom.trim()})` : banForm.reasonPreset);
+
+    const isPermanent = banForm.durationPreset === 'permanent';
+    const blockedUntil = isPermanent ? undefined : (banForm.blockedUntil || undefined);
+
+    if (!isPermanent && !blockedUntil) {
+      alert('Укажите дату окончания блокировки');
+      return;
+    }
+
+    const fullName = `${banForm.lastName.trim()} ${banForm.firstName.trim()}`.trim();
+
+    if (editingBanEntry) {
+      const updated: BlacklistEntry = {
+        ...editingBanEntry,
+        fullName,
+        firstName: banForm.firstName.trim(),
+        lastName: banForm.lastName.trim(),
+        birthDate: banForm.birthDate || undefined,
+        email: banForm.email.trim() || undefined,
+        phone: banForm.phone.trim() || undefined,
+        reason: finalReason,
+        isPermanent,
+        blockedUntil,
+        publicMessage: banForm.publicMessage.trim() || undefined,
+        adminNotes: banForm.adminNotes.trim() || undefined,
+        active: true
+      };
+      marathonStorage.updateBlacklistEntry(updated);
+    } else {
+      marathonStorage.addToBlacklist({
+        fullName,
+        firstName: banForm.firstName.trim(),
+        lastName: banForm.lastName.trim(),
+        birthDate: banForm.birthDate || undefined,
+        email: banForm.email.trim() || undefined,
+        phone: banForm.phone.trim() || undefined,
+        reason: finalReason,
+        isPermanent,
+        blockedUntil,
+        publicMessage: banForm.publicMessage.trim() || undefined,
+        adminNotes: banForm.adminNotes.trim() || undefined,
+        active: true
+      });
+    }
+
+    setBlacklist(marathonStorage.getBlacklist());
+    setIsBanModalOpen(false);
+    setEditingBanEntry(null);
+  };
+
+  const handleRemoveFromBlacklist = (id: string, name: string) => {
+    if (confirm(`Вы уверены, что хотите разблокировать атлета «${name}» и удалить его из черного списка?`)) {
+      marathonStorage.removeFromBlacklist(id);
+      setBlacklist(marathonStorage.getBlacklist());
+    }
+  };
+
   const handleCreateRunner = (e: React.FormEvent) => {
     e.preventDefault();
     const dist = currentEvent.distances.find(d => d.id === newRunnerForm.distanceId) || currentEvent.distances[0];
@@ -968,6 +1138,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsAddRunnerOpen(false);
     refreshData();
   };
+
+  const getRemainingDaysLabel = (entry: BlacklistEntry) => {
+    if (entry.isPermanent || !entry.blockedUntil) {
+      return { text: 'Бессрочно', status: 'permanent', badge: 'bg-rose-500/10 text-rose-400 border-rose-500/30' };
+    }
+    const until = new Date(entry.blockedUntil).getTime();
+    const diffDays = Math.ceil((until - Date.now()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) {
+      return { text: 'Срок истёк (Доступ открыт)', status: 'expired', badge: 'bg-zinc-800 text-zinc-400 border-zinc-700' };
+    }
+    const dateStr = new Date(entry.blockedUntil).toLocaleDateString('ru-RU');
+    if (diffDays > 30) {
+      const months = Math.round(diffDays / 30);
+      return { text: `До ${dateStr} (~${months} мес)`, status: 'active', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30' };
+    }
+    return { text: `До ${dateStr} (${diffDays} дн)`, status: 'active', badge: 'bg-rose-500/10 text-rose-400 border-rose-500/30' };
+  };
+
+  const filteredBlacklist = blacklist.filter(b => {
+    if (!blacklistSearch.trim()) return true;
+    const q = blacklistSearch.toLowerCase();
+    return (
+      b.fullName.toLowerCase().includes(q) ||
+      (b.email && b.email.toLowerCase().includes(q)) ||
+      (b.phone && b.phone.includes(q)) ||
+      (b.reason && b.reason.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div className="min-h-screen bg-[#07080c] text-zinc-100 flex flex-col">
@@ -1269,6 +1467,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </span>
           </button>
 
+          <button
+            onClick={() => setActiveTab('blacklist')}
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              activeTab === 'blacklist'
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <ShieldAlert className="w-4 h-4 text-rose-400" />
+              Черный список (Бан)
+            </div>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              activeTab === 'blacklist'
+                ? 'bg-white text-rose-600'
+                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+            }`}>
+              {blacklist.filter(b => b.active).length}
+            </span>
+          </button>
+
           {/* Export Short Links */}
           <div className="pt-6 border-t border-zinc-850 mt-6 space-y-2">
             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-3">
@@ -1555,10 +1774,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 {runner.checkedInExpo ? 'ВЫДАН' : 'НЕ ВЫДАН'}
                               </button>
                             </td>
-                            <td className="py-3 px-3 text-right">
+                            <td className="py-3 px-3 text-right whitespace-nowrap">
                               <button
+                                type="button"
+                                onClick={() => handleOpenBanModal(runner)}
+                                className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/20 transition-colors mr-1 cursor-pointer"
+                                title="В черный список (Заблокировать регистрацию)"
+                              >
+                                <ShieldAlert className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => handleDeleteRunner(runner.id)}
-                                className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-800 transition-colors cursor-pointer"
                                 title="Удалить участника"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -2740,6 +2968,191 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {/* TAB: PROMO CODES */}
           {activeTab === 'promocodes' && (
             <PromoCodesManager events={events} />
+          )}
+
+          {/* TAB: BLACKLIST / DISQUALIFIED ATHLETES */}
+          {activeTab === 'blacklist' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              
+              {/* Top Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-3xl bg-zinc-900/80 border border-zinc-800">
+                <div>
+                  <div className="flex items-center gap-2 text-rose-500 text-xs font-bold uppercase tracking-wider mb-1">
+                    <ShieldAlert className="w-4 h-4" />
+                    Дисциплинарный комитет & Ограничения
+                  </div>
+                  <h2 className="text-2xl font-black font-bebas text-white tracking-wide">
+                    ЧЕРНЫЙ СПИСОК АТЛЕТОВ
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Управление блокировками регистрации атлетов на определенный срок или бессрочно по ФИО, телефону и email
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenBanModal()}
+                  className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg shadow-rose-600/20 cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  Внести атлета в черный список
+                </button>
+              </div>
+
+              {/* Analytics Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-bold text-zinc-400 uppercase">Всего записей</div>
+                    <div className="text-2xl font-black font-mono text-white mt-0.5">{blacklist.length}</div>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400">
+                    <Users className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-bold text-rose-400 uppercase">Активных ограничений</div>
+                    <div className="text-2xl font-black font-mono text-rose-400 mt-0.5">
+                      {blacklist.filter(b => b.active && (b.isPermanent || (b.blockedUntil && new Date(b.blockedUntil).getTime() >= Date.now()))).length}
+                    </div>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                    <Ban className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+                  <div>
+                    <div className="text-[11px] font-bold text-zinc-500 uppercase">Истёкшие блокировки</div>
+                    <div className="text-2xl font-black font-mono text-zinc-400 mt-0.5">
+                      {blacklist.filter(b => !b.isPermanent && b.blockedUntil && new Date(b.blockedUntil).getTime() < Date.now()).length}
+                    </div>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Поиск по ФИО, телефону, email, причине ограничения..."
+                  value={blacklistSearch}
+                  onChange={e => setBlacklistSearch(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              {/* Blacklist Table */}
+              <div className="bg-[#0e0f17] border border-zinc-800 rounded-2xl overflow-hidden shadow-xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-zinc-950/80 text-zinc-400 uppercase text-[10px] font-bold border-b border-zinc-800">
+                      <tr>
+                        <th className="py-3 px-3.5">Атлет</th>
+                        <th className="py-3 px-3.5">Контакты для блокировки</th>
+                        <th className="py-3 px-3.5">Причина & Нарушение</th>
+                        <th className="py-3 px-3.5">Срок ограничения</th>
+                        <th className="py-3 px-3.5">Сообщение для атлета</th>
+                        <th className="py-3 px-3.5 text-right">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/60 bg-zinc-900/30">
+                      {filteredBlacklist.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-12 text-center text-zinc-500">
+                            {blacklistSearch ? 'Ничего не найдено по вашему запросу' : 'Черный список пуст. Атлеты с ограничениями отсутствуют.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredBlacklist.map(entry => {
+                          const statusInfo = getRemainingDaysLabel(entry);
+                          return (
+                            <tr key={entry.id} className="hover:bg-zinc-800/40 transition-colors">
+                              <td className="py-3 px-3.5 font-bold text-white whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${statusInfo.status === 'expired' ? 'bg-zinc-500' : 'bg-rose-500'}`} />
+                                  <span>{entry.fullName}</span>
+                                </div>
+                                {entry.birthDate && (
+                                  <div className="text-[10px] text-zinc-400 font-normal mt-0.5 font-mono">
+                                    Дата рождения: {entry.birthDate}
+                                  </div>
+                                )}
+                              </td>
+
+                              <td className="py-3 px-3.5 font-mono text-[11px] text-zinc-300">
+                                {entry.phone && (
+                                  <div className="text-zinc-200">
+                                    {entry.phone}
+                                  </div>
+                                )}
+                                {entry.email && (
+                                  <div className="text-zinc-400 text-[10px]">
+                                    {entry.email}
+                                  </div>
+                                )}
+                                {!entry.phone && !entry.email && (
+                                  <span className="text-zinc-600 italic text-[10px]">Только по ФИО</span>
+                                )}
+                              </td>
+
+                              <td className="py-3 px-3.5 text-zinc-300 max-w-[220px]">
+                                <div className="font-semibold text-rose-300 text-xs">
+                                  {entry.reason}
+                                </div>
+                                {entry.adminNotes && (
+                                  <div className="text-[10px] text-zinc-500 mt-0.5 truncate" title={entry.adminNotes}>
+                                    📝 {entry.adminNotes}
+                                  </div>
+                                )}
+                              </td>
+
+                              <td className="py-3 px-3.5 whitespace-nowrap">
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border inline-block ${statusInfo.badge}`}>
+                                  {statusInfo.text}
+                                </span>
+                              </td>
+
+                              <td className="py-3 px-3.5 text-zinc-400 text-[11px] max-w-[200px] truncate" title={entry.publicMessage}>
+                                {entry.publicMessage || '—'}
+                              </td>
+
+                              <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditBanModal(entry)}
+                                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+                                    title="Редактировать ограничение"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFromBlacklist(entry.id, entry.fullName)}
+                                    className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-500/20 transition-colors cursor-pointer"
+                                    title="Разблокировать (удалить из черного списка)"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
           )}
 
         </main>
@@ -4108,6 +4521,240 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           onClose={() => setPreviewDocKey(null)}
           documentKey={previewDocKey}
         />
+      )}
+
+      {/* MODAL: BLACKLIST ATHLETE (ADD OR EDIT) */}
+      {isBanModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto animate-in fade-in zoom-in-95">
+            
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black font-bebas text-white tracking-wide">
+                    {editingBanEntry ? 'РЕДАКТИРОВАТЬ БЛОКИРОВКУ АТЛЕТА' : 'ВНЕСТИ АТЛЕТА В ЧЕРНЫЙ СПИСОК'}
+                  </h3>
+                  <p className="text-[11px] text-zinc-400">
+                    Ограничение регистрации на сайте по ФИО, телефону и email
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBanModalOpen(false);
+                  setEditingBanEntry(null);
+                }}
+                className="p-1.5 text-zinc-500 hover:text-white rounded-xl hover:bg-zinc-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBan} className="space-y-4 text-xs">
+              
+              {/* Name Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-zinc-400 font-bold block mb-1">Имя атлета *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Иван"
+                    value={banForm.firstName}
+                    onChange={e => setBanForm({ ...banForm, firstName: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-zinc-400 font-bold block mb-1">Фамилия атлета *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Иванов"
+                    value={banForm.lastName}
+                    onChange={e => setBanForm({ ...banForm, lastName: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Contacts & BirthDate for Reliable Matching */}
+              <div className="p-3.5 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-3">
+                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                  Идентификаторы для автоматической проверки:
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="text-[11px] text-zinc-400 block mb-1">Телефон</label>
+                    <input
+                      type="text"
+                      placeholder="+7 701 123 45 67"
+                      value={banForm.phone}
+                      onChange={e => setBanForm({ ...banForm, phone: e.target.value })}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-2.5 py-1.5 text-white font-mono text-[11px] focus:border-rose-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-zinc-400 block mb-1">Email</label>
+                    <input
+                      type="email"
+                      placeholder="runner@mail.ru"
+                      value={banForm.email}
+                      onChange={e => setBanForm({ ...banForm, email: e.target.value })}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-2.5 py-1.5 text-white font-mono text-[11px] focus:border-rose-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-zinc-400 block mb-1">Дата рождения</label>
+                    <input
+                      type="date"
+                      value={banForm.birthDate}
+                      onChange={e => setBanForm({ ...banForm, birthDate: e.target.value })}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-2 py-1.5 text-white text-[11px] focus:border-rose-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-zinc-500">
+                  💡 Система заблокирует регистрацию при совпадении телефона, email ИЛИ связки «ФИО + Дата рождения».
+                </p>
+              </div>
+
+              {/* Duration Presets */}
+              <div>
+                <label className="text-zinc-400 font-bold block mb-1.5">
+                  Срок блокировки:
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                  {[
+                    { key: '3 months', label: '3 мес.' },
+                    { key: '6 months', label: '6 мес.' },
+                    { key: '1 year', label: '1 год' },
+                    { key: '2 years', label: '2 года' },
+                    { key: 'permanent', label: 'Бессрочно' },
+                    { key: 'custom', label: 'Своя дата' }
+                  ].map(p => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => handleDurationPresetChange(p.key as any)}
+                      className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer text-center ${
+                        banForm.durationPreset === p.key
+                          ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
+                          : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-white'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                {banForm.durationPreset !== 'permanent' && (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <span className="text-[11px] text-zinc-400">Заблокирован до:</span>
+                    <input
+                      type="date"
+                      required
+                      value={banForm.blockedUntil}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setBanForm(prev => ({
+                          ...prev,
+                          blockedUntil: val,
+                          durationPreset: 'custom',
+                          publicMessage: `Регистрация ограничена решением оргкомитета забега до ${new Date(val).toLocaleDateString('ru-RU')}. По вопросам: info@aktobe-marathon.kz`
+                        }));
+                      }}
+                      className="bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white text-xs focus:border-rose-500 focus:outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Reason Presets */}
+              <div>
+                <label className="text-zinc-400 font-bold block mb-1">Причина ограничения *</label>
+                <select
+                  value={banForm.reasonPreset}
+                  onChange={e => setBanForm({ ...banForm, reasonPreset: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:border-rose-500 focus:outline-none mb-2"
+                >
+                  <option value="Неспортивное поведение / нарушение регламента забега">Неспортивное поведение / нарушение регламента забега</option>
+                  <option value="Срезка дистанции / передача чипа другому лицу">Срезка дистанции / передача чипа другому лицу</option>
+                  <option value="Дисквалификация Федерацией легкой атлетики">Дисквалификация Федерацией легкой атлетики</option>
+                  <option value="Неуплата стартового взноса / финансовые нарушения">Неуплата стартового взноса / финансовые нарушения</option>
+                  <option value="Оскорбление волонтеров / судей / участников">Оскорбление волонтеров / судей / участников</option>
+                  <option value="Другая причина">Другая причина (укажите ниже)</option>
+                </select>
+
+                <input
+                  type="text"
+                  placeholder="Дополнительные детали или своя причина..."
+                  value={banForm.reasonCustom}
+                  onChange={e => setBanForm({ ...banForm, reasonCustom: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 text-white text-xs placeholder-zinc-500 focus:border-rose-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Public Message for Athlete */}
+              <div>
+                <label className="text-zinc-400 font-bold block mb-1">
+                  Публичный текст (что увидит атлет при попытке регистрации):
+                </label>
+                <textarea
+                  rows={2}
+                  value={banForm.publicMessage}
+                  onChange={e => setBanForm({ ...banForm, publicMessage: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl p-2.5 text-white text-xs focus:border-rose-500 focus:outline-none resize-none"
+                  placeholder="Регистрация ограничена решением оргкомитета..."
+                />
+              </div>
+
+              {/* Internal Admin Note */}
+              <div>
+                <label className="text-zinc-500 font-bold block mb-1">
+                  Внутренняя заметка для оргкомитета (не видна атлету):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Например: Протокол судейской коллегии №14 от 12.05"
+                  value={banForm.adminNotes}
+                  onChange={e => setBanForm({ ...banForm, adminNotes: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-zinc-300 text-xs focus:border-zinc-600 focus:outline-none"
+                />
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-3 border-t border-zinc-800 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBanModalOpen(false);
+                    setEditingBanEntry(null);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-zinc-900 text-zinc-300 font-bold hover:bg-zinc-800 cursor-pointer"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-rose-600 text-white font-black uppercase tracking-wider hover:bg-rose-500 shadow-lg shadow-rose-600/30 cursor-pointer"
+                >
+                  {editingBanEntry ? 'Сохранить изменения' : 'Внести в черный список'}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
       )}
 
     </div>

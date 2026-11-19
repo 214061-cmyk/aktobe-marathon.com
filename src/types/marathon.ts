@@ -251,3 +251,21 @@ export interface EmailServerConfig {
   fromName: string;
   fromEmail: string;
 }
+
+export interface BlacklistEntry {
+  id: string;
+  fullName: string;
+  firstName: string;
+  lastName: string;
+  birthDate?: string; // e.g. "1995-04-12"
+  email?: string;
+  phone?: string;
+  normalizedPhone?: string; // digits only for reliable matching
+  reason: string;
+  blockedUntil?: string; // ISO date string or undefined for permanent
+  isPermanent: boolean;
+  publicMessage?: string;
+  adminNotes?: string;
+  createdAt: string;
+  active: boolean;
+}
