@@ -1,4 +1,4 @@
-import type { MarathonEvent, Participant, RaceResult, Distance, DocumentKey, LegalDocument, NewsletterContact, EmailTemplate, EmailServerConfig, PromoCode, BlacklistEntry } from '../types/marathon';
+import type { MarathonEvent, Participant, RaceResult, Distance, DocumentKey, LegalDocument, NewsletterContact, EmailTemplate, EmailServerConfig, PromoCode, BlacklistEntry, AdminAuthConfig } from '../types/marathon';
 import { INITIAL_EVENTS, INITIAL_PARTICIPANTS, INITIAL_RESULTS, INITIAL_LEGAL_DOCUMENTS, DEFAULT_EMAIL_TEMPLATES, DEFAULT_EMAIL_SERVER_CONFIG, DEFAULT_PROMO_CODES } from '../data/initialData';
 import initialSubscribersRaw from '../data/initialSubscribers.json';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
@@ -13,8 +13,16 @@ const STORAGE_KEY_EMAIL_TEMPLATES = 'qazaq_run_email_templates_v2';
 const STORAGE_KEY_EMAIL_SERVER = 'qazaq_run_email_server_v2';
 const STORAGE_KEY_PROMOCODES = 'qazaq_run_promocodes_v2';
 const STORAGE_KEY_BLACKLIST = 'qazaq_run_blacklist_v1';
+const STORAGE_KEY_ADMIN_AUTH = 'qazaq_run_admin_auth_v1';
 
-function eventToDb(e: MarathonEvent, blacklist?: BlacklistEntry[]) {
+export const DEFAULT_ADMIN_SECRET_HASH = 'aqtobe-org-panel-7492';
+const DEFAULT_ADMIN_AUTH: AdminAuthConfig = {
+  username: 'admin',
+  password: 'admin2026',
+  secretHash: DEFAULT_ADMIN_SECRET_HASH
+};
+
+function eventToDb(e: MarathonEvent, blacklist?: BlacklistEntry[], adminAuth?: AdminAuthConfig) {
   return {
     id: e.id,
     title: e.title,
@@ -36,7 +44,8 @@ function eventToDb(e: MarathonEvent, blacklist?: BlacklistEntry[]) {
     options_config: {
       ...(e.optionsConfig || {}),
       resultsUrl: e.resultsUrl || '',
-      ...(blacklist !== undefined ? { blacklist } : {})
+      ...(blacklist !== undefined ? { blacklist } : {}),
+      ...(adminAuth ? { adminAuth } : {})
     }
   };
 }
@@ -145,6 +154,7 @@ class MarathonStorage {
   private emailServerConfig: EmailServerConfig = DEFAULT_EMAIL_SERVER_CONFIG;
   private promoCodes: PromoCode[] = [];
   private blacklist: BlacklistEntry[] = [];
+  private adminAuth: AdminAuthConfig = { ...DEFAULT_ADMIN_AUTH };
   private isSyncing = false;
 
   constructor() {
@@ -191,6 +201,11 @@ class MarathonStorage {
 
       const storedBlacklist = localStorage.getItem(STORAGE_KEY_BLACKLIST);
       this.blacklist = storedBlacklist ? JSON.parse(storedBlacklist) : [];
+
+      const storedAdminAuth = localStorage.getItem(STORAGE_KEY_ADMIN_AUTH);
+      this.adminAuth = storedAdminAuth
+        ? { ...DEFAULT_ADMIN_AUTH, ...JSON.parse(storedAdminAuth) }
+        : { ...DEFAULT_ADMIN_AUTH };
     } catch {
       this.events = INITIAL_EVENTS;
       this.participants = INITIAL_PARTICIPANTS;
@@ -201,6 +216,7 @@ class MarathonStorage {
       this.emailServerConfig = DEFAULT_EMAIL_SERVER_CONFIG;
       this.promoCodes = DEFAULT_PROMO_CODES;
       this.blacklist = [];
+      this.adminAuth = { ...DEFAULT_ADMIN_AUTH };
     }
 
     // Listen for cross-tab localStorage updates (e.g. ban added in admin tab while registration tab is open)
@@ -209,6 +225,9 @@ class MarathonStorage {
         try {
           if (e.key === STORAGE_KEY_BLACKLIST) {
             this.reloadBlacklistFromLocal();
+            window.dispatchEvent(new Event('marathon-storage-update'));
+          } else if (e.key === STORAGE_KEY_ADMIN_AUTH) {
+            this.reloadAdminAuthFromLocal();
             window.dispatchEvent(new Event('marathon-storage-update'));
           } else if (e.key === STORAGE_KEY_PARTICIPANTS && e.newValue) {
             this.participants = JSON.parse(e.newValue);
@@ -261,10 +280,32 @@ class MarathonStorage {
           }
           this.blacklist = Array.from(merged.values());
         }
+
+        // Sync cloud-saved admin credentials if available
+        let bestCloudAuth: AdminAuthConfig | null = null;
+        for (const ev of this.events) {
+          const cand = ev.optionsConfig?.adminAuth;
+          if (cand && cand.username && cand.password) {
+            if (
+              !bestCloudAuth ||
+              (cand.updatedAt && (!bestCloudAuth.updatedAt || cand.updatedAt > bestCloudAuth.updatedAt))
+            ) {
+              bestCloudAuth = cand;
+            }
+          }
+        }
+        if (bestCloudAuth) {
+          if (
+            !this.adminAuth.updatedAt ||
+            (bestCloudAuth.updatedAt && bestCloudAuth.updatedAt >= this.adminAuth.updatedAt)
+          ) {
+            this.adminAuth = { ...DEFAULT_ADMIN_AUTH, ...bestCloudAuth };
+          }
+        }
       } else if (!eventsErr && (!dbEvents || dbEvents.length === 0)) {
         // Seed initial events to Supabase if database table is empty
         for (const ev of this.events) {
-          await supabase.from('events').upsert(eventToDb(ev, this.blacklist));
+          await supabase.from('events').upsert(eventToDb(ev, this.blacklist, this.adminAuth));
         }
       }
 
@@ -316,6 +357,7 @@ class MarathonStorage {
       localStorage.setItem(STORAGE_KEY_EMAIL_SERVER, JSON.stringify(this.emailServerConfig));
       localStorage.setItem(STORAGE_KEY_PROMOCODES, JSON.stringify(this.promoCodes));
       localStorage.setItem(STORAGE_KEY_BLACKLIST, JSON.stringify(this.blacklist));
+      localStorage.setItem(STORAGE_KEY_ADMIN_AUTH, JSON.stringify(this.adminAuth));
     } catch (e) {
       console.error('Storage cache error', e);
     }
@@ -427,7 +469,7 @@ class MarathonStorage {
 
     // Async sync to SQL Database
     if (supabase) {
-      supabase.from('events').upsert(eventToDb(event, this.blacklist)).then(({ error }) => {
+      supabase.from('events').upsert(eventToDb(event, this.blacklist, this.adminAuth)).then(({ error }) => {
         if (error) console.error('Supabase saveEvent error:', error);
       });
     }
@@ -1151,7 +1193,8 @@ class MarathonStorage {
         pastaPartyPrice: 3500,
         enableCharity: true
       }),
-      blacklist: this.blacklist
+      blacklist: this.blacklist,
+      adminAuth: this.adminAuth
     };
     primaryEvent.optionsConfig = updatedOptions;
     this.persistLocalOnly();
@@ -1320,6 +1363,63 @@ class MarathonStorage {
     }
 
     return { blocked: false };
+  }
+
+  // --- ADMIN AUTH & SECURITY ---
+  private reloadAdminAuthFromLocal(): void {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_ADMIN_AUTH);
+      if (stored !== null) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          this.adminAuth = { ...DEFAULT_ADMIN_AUTH, ...parsed };
+        }
+      }
+    } catch {
+      // Ignore storage read errors
+    }
+  }
+
+  public getAdminAuth(): AdminAuthConfig {
+    this.reloadAdminAuthFromLocal();
+    return { ...this.adminAuth };
+  }
+
+  public saveAdminAuth(updates: Partial<AdminAuthConfig>): AdminAuthConfig {
+    this.reloadAdminAuthFromLocal();
+    const cleanedHash = (updates.secretHash ?? this.adminAuth.secretHash)
+      .trim()
+      .replace(/^#+/, '')
+      .replace(/\s+/g, '') || DEFAULT_ADMIN_SECRET_HASH;
+
+    this.adminAuth = {
+      username: (updates.username ?? this.adminAuth.username).trim() || DEFAULT_ADMIN_AUTH.username,
+      password: updates.password !== undefined && updates.password !== '' ? updates.password : this.adminAuth.password,
+      secretHash: cleanedHash,
+      updatedAt: new Date().toISOString()
+    };
+
+    this.persist();
+    this.syncBlacklistToCloud();
+    return { ...this.adminAuth };
+  }
+
+  public verifyAdminCredentials(username: string, password: string): boolean {
+    this.reloadAdminAuthFromLocal();
+    return (
+      username.trim().toLowerCase() === this.adminAuth.username.trim().toLowerCase() &&
+      password === this.adminAuth.password
+    );
+  }
+
+  public isAdminHashMatch(rawHash: string): boolean {
+    this.reloadAdminAuthFromLocal();
+    const cleaned = rawHash.trim().toLowerCase().replace(/^#+/, '');
+    if (!cleaned) return false;
+    return (
+      cleaned === this.adminAuth.secretHash.trim().toLowerCase() ||
+      cleaned === DEFAULT_ADMIN_SECRET_HASH
+    );
   }
 }
 

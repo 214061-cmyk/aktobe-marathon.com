@@ -14,7 +14,7 @@ import {
   MapPin, Clock, Award, AlertCircle, AlertTriangle, CheckCircle2,
   Tag, Layers, Sparkles, ExternalLink, Globe, Shirt, Utensils, Heart, Image as ImageIcon,
   CalendarDays, Flag, LogOut, Archive, RotateCcw, FolderArchive, Mail, Ticket, Upload,
-  ShieldAlert, Ban, UserX
+  ShieldAlert, Ban, UserX, KeyRound, Lock, Copy
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -117,6 +117,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     publicMessage: '',
     adminNotes: ''
   });
+
+  // Admin Password & Secret Route Modal State
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [securityForm, setSecurityForm] = useState({
+    currentPassword: '',
+    newUsername: '',
+    newPassword: '',
+    confirmPassword: '',
+    secretHash: ''
+  });
+  const [securityNotice, setSecurityNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [copiedSecretLink, setCopiedSecretLink] = useState(false);
 
   // Add Participant Manual Modal State
   const [isAddRunnerOpen, setIsAddRunnerOpen] = useState(false);
@@ -1196,6 +1208,77 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   });
 
+  const handleOpenSecurityModal = () => {
+    const auth = marathonStorage.getAdminAuth();
+    setSecurityForm({
+      currentPassword: '',
+      newUsername: auth.username,
+      newPassword: '',
+      confirmPassword: '',
+      secretHash: auth.secretHash
+    });
+    setSecurityNotice(null);
+    setCopiedSecretLink(false);
+    setIsSecurityModalOpen(true);
+  };
+
+  const handleSaveSecuritySettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSecurityNotice(null);
+
+    const currentAuth = marathonStorage.getAdminAuth();
+    if (securityForm.currentPassword !== currentAuth.password) {
+      setSecurityNotice({ type: 'error', text: 'Текущий пароль введен неверно' });
+      return;
+    }
+
+    const cleanUsername = securityForm.newUsername.trim();
+    if (cleanUsername.length < 3) {
+      setSecurityNotice({ type: 'error', text: 'Логин должен содержать минимум 3 символа' });
+      return;
+    }
+
+    if (securityForm.newPassword) {
+      if (securityForm.newPassword.length < 6) {
+        setSecurityNotice({ type: 'error', text: 'Новый пароль должен содержать минимум 6 символов' });
+        return;
+      }
+      if (securityForm.newPassword !== securityForm.confirmPassword) {
+        setSecurityNotice({ type: 'error', text: 'Новый пароль и подтверждение не совпадают' });
+        return;
+      }
+    }
+
+    const cleanHash = securityForm.secretHash.trim().replace(/^#+/, '').replace(/\s+/g, '');
+    if (cleanHash.length < 6 || cleanHash.toLowerCase() === 'admin') {
+      setSecurityNotice({
+        type: 'error',
+        text: 'Секретный адрес должен содержать минимум 6 символов и не может быть "admin"'
+      });
+      return;
+    }
+
+    marathonStorage.saveAdminAuth({
+      username: cleanUsername,
+      ...(securityForm.newPassword ? { password: securityForm.newPassword } : {}),
+      secretHash: cleanHash
+    });
+
+    if (window.location.hash) {
+      window.history.replaceState(null, '', `#${cleanHash}`);
+    }
+
+    setSecurityForm(prev => ({
+      ...prev,
+      currentPassword: '',
+      newUsername: cleanUsername,
+      newPassword: '',
+      confirmPassword: '',
+      secretHash: cleanHash
+    }));
+    setSecurityNotice({ type: 'success', text: 'Настройки безопасности и пароль успешно обновлены!' });
+  };
+
   return (
     <div className="min-h-screen bg-[#07080c] text-zinc-100 flex flex-col">
       {/* Top Admin Navbar */}
@@ -1265,6 +1348,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleOpenSecurityModal}
+            title="Сменить пароль, логин и секретный адрес входа"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-lime-400 border border-zinc-800 text-xs font-bold transition-colors cursor-pointer"
+          >
+            <KeyRound className="w-3.5 h-3.5 text-lime-400" />
+            <span className="hidden md:inline">Пароль и доступ</span>
           </button>
 
           {onLogout && (
@@ -4781,6 +4874,168 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
 
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADMIN PASSWORD & SECURITY SETTINGS */}
+      {isSecurityModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-5 my-auto max-h-[92vh] overflow-y-auto animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-lime-400/15 border border-lime-400/30 text-lime-400 flex items-center justify-center">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black font-bebas text-white tracking-wide">
+                    БЕЗОПАСНОСТЬ И ДОСТУП В АДМИНКУ
+                  </h3>
+                  <p className="text-[11px] text-zinc-400">
+                    Смена логина, пароля администратора и секретной ссылки входа
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsSecurityModalOpen(false)}
+                className="p-1.5 text-zinc-500 hover:text-white rounded-xl hover:bg-zinc-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {securityNotice && (
+              <div
+                className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-2 border ${
+                  securityNotice.type === 'success'
+                    ? 'bg-emerald-950/50 border-emerald-700/60 text-emerald-300'
+                    : 'bg-rose-950/50 border-rose-700/60 text-rose-300'
+                }`}
+              >
+                {securityNotice.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                )}
+                <span>{securityNotice.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveSecuritySettings} className="space-y-4 text-xs">
+              {/* Secret URL Preview & Copy */}
+              <div className="p-3.5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
+                    Секретная ссылка на панель управления
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cleanSlug = (securityForm.secretHash || 'aqtobe-org-panel-7492').trim().replace(/^#+/, '').replace(/\s+/g, '');
+                      const fullUrl = `https://aktobe-marathoncom.vercel.app/#${cleanSlug}`;
+                      navigator.clipboard?.writeText(fullUrl);
+                      setCopiedSecretLink(true);
+                      setTimeout(() => setCopiedSecretLink(false), 2500);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-lime-400 font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    {copiedSecretLink ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    {copiedSecretLink ? 'Скопировано' : 'Копировать'}
+                  </button>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-[11px] text-lime-300 break-all">
+                  {`https://aktobe-marathoncom.vercel.app/#${(securityForm.secretHash || 'aqtobe-org-panel-7492').trim().replace(/^#+/, '').replace(/\s+/g, '')}`}
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-zinc-400 block mb-1">
+                    Изменить секретный хэш (после #):
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="aqtobe-org-panel-7492"
+                    value={securityForm.secretHash}
+                    onChange={e => setSecurityForm(prev => ({ ...prev, secretHash: e.target.value }))}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-lime-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Current Password */}
+              <div>
+                <label className="text-zinc-400 font-bold block mb-1">
+                  Текущий пароль (для подтверждения изменений) *
+                </label>
+                <div className="relative">
+                  <Lock className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="Введите текущий пароль"
+                    value={securityForm.currentPassword}
+                    onChange={e => setSecurityForm(prev => ({ ...prev, currentPassword: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl pl-9 pr-3 py-2 text-white focus:border-lime-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Login */}
+              <div>
+                <label className="text-zinc-400 font-bold block mb-1">Логин администратора *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Логин"
+                  value={securityForm.newUsername}
+                  onChange={e => setSecurityForm(prev => ({ ...prev, newUsername: e.target.value }))}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:border-lime-400 focus:outline-none"
+                />
+              </div>
+
+              {/* New Password + Confirm */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-zinc-400 font-bold block mb-1">Новый пароль (если меняете)</label>
+                  <input
+                    type="password"
+                    placeholder="Минимум 6 символов"
+                    value={securityForm.newPassword}
+                    onChange={e => setSecurityForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:border-lime-400 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-zinc-400 font-bold block mb-1">Подтверждение пароля</label>
+                  <input
+                    type="password"
+                    placeholder="Повторите новый пароль"
+                    value={securityForm.confirmPassword}
+                    onChange={e => setSecurityForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:border-lime-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-zinc-800 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSecurityModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl bg-zinc-900 text-zinc-300 font-bold hover:bg-zinc-800 cursor-pointer"
+                >
+                  Закрыть
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-lime-400 text-black font-black uppercase tracking-wider hover:bg-lime-300 shadow-lg shadow-lime-400/20 cursor-pointer"
+                >
+                  Сохранить доступ
+                </button>
+              </div>
             </form>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Lock, User, ArrowLeft, ShieldCheck, KeyRound, Sparkles, AlertCircle } from 'lucide-react';
+import { Lock, User, ArrowLeft, ShieldCheck, KeyRound, AlertCircle } from 'lucide-react';
+import { marathonStorage } from '../../services/marathonStorage';
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
@@ -27,29 +28,14 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
     setIsLoading(true);
 
     setTimeout(() => {
-      // Check credentials (admin / admin2026 or admin / admin)
-      if (
-        (username.trim().toLowerCase() === 'admin' && (password === 'admin2026' || password === 'admin')) ||
-        (username.trim().toLowerCase() === 'director' && password === 'marathon2026')
-      ) {
+      if (marathonStorage.verifyAdminCredentials(username, password)) {
         sessionStorage.setItem('marathon_admin_authenticated', 'true');
         onLoginSuccess();
       } else {
-        setError('Неверный логин или пароль. Попробуйте admin / admin2026');
+        setError('Неверный логин или пароль администратора');
         setIsLoading(false);
       }
     }, 400);
-  };
-
-  const handleQuickDemoLogin = () => {
-    setUsername('admin');
-    setPassword('admin2026');
-    setError('');
-    setIsLoading(true);
-    setTimeout(() => {
-      sessionStorage.setItem('marathon_admin_authenticated', 'true');
-      onLoginSuccess();
-    }, 300);
   };
 
   return (
@@ -114,7 +100,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
+                placeholder="Введите логин"
                 className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:border-red-600 focus:ring-2 focus:ring-red-100 outline-none text-sm font-medium transition-all text-slate-900 placeholder:text-slate-400"
                 autoFocus
               />
@@ -137,24 +123,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                 className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:border-red-600 focus:ring-2 focus:ring-red-100 outline-none text-sm font-medium transition-all text-slate-900 placeholder:text-slate-400"
               />
             </div>
-          </div>
-
-          {/* Quick Demo Credentials Info */}
-          <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 text-[11px] text-slate-600 flex items-center justify-between">
-            <div>
-              <span className="font-bold text-slate-800">Тестовый логин: </span>
-              <code className="text-red-600 font-mono font-bold">admin</code>
-              <span className="mx-1">•</span>
-              <span className="font-bold text-slate-800">Пароль: </span>
-              <code className="text-red-600 font-mono font-bold">admin2026</code>
-            </div>
-            <button
-              type="button"
-              onClick={handleQuickDemoLogin}
-              className="text-red-600 hover:text-red-700 font-bold hover:underline cursor-pointer flex items-center gap-1 shrink-0 ml-2"
-            >
-              <Sparkles className="w-3 h-3" /> Вставить
-            </button>
           </div>
 
           <button

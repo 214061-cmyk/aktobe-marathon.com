@@ -98,6 +98,7 @@ export interface EventOptionsConfig {
   enableStartClusters?: boolean; // Control start cluster & elite pace selection in registration
   resultsUrl?: string; // Optional direct results URL for this event
   blacklist?: BlacklistEntry[]; // Cloud-synced athlete blacklist
+  adminAuth?: AdminAuthConfig; // Cloud-synced admin credentials & secret route
 }
 
 export interface MarathonEvent {
@@ -269,4 +270,11 @@ export interface BlacklistEntry {
   adminNotes?: string;
   createdAt: string;
   active: boolean;
+}
+
+export interface AdminAuthConfig {
+  username: string;
+  password: string;
+  secretHash: string; // e.g. 'aqtobe-org-panel-7492'
+  updatedAt?: string;
 }

@@ -61,11 +61,10 @@ export function App() {
     const authStatus = sessionStorage.getItem('marathon_admin_authenticated') === 'true';
     setIsAdminAuthenticated(authStatus);
 
-    // Check hash for #admin or ?admin=true
+    // Check secret hash route for Admin access
     const checkHashRoute = () => {
-      const hash = window.location.hash.toLowerCase();
-      const params = new URLSearchParams(window.location.search);
-      if (hash === '#admin' || params.get('admin') === 'true') {
+      const hash = window.location.hash;
+      if (marathonStorage.isAdminHashMatch(hash)) {
         setIsAdminView(true);
       }
     };
@@ -73,7 +72,10 @@ export function App() {
     checkHashRoute();
     window.addEventListener('hashchange', checkHashRoute);
 
-    const handleStorageUpdate = () => loadData();
+    const handleStorageUpdate = () => {
+      loadData();
+      checkHashRoute();
+    };
     window.addEventListener('marathon-storage-update', handleStorageUpdate);
 
     return () => {
@@ -83,7 +85,7 @@ export function App() {
   }, []);
 
   const handleBackToSite = () => {
-    if (window.location.hash === '#admin') {
+    if (window.location.hash) {
       window.history.pushState(null, '', window.location.pathname);
     }
     setIsAdminView(false);
