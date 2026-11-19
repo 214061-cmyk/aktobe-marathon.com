@@ -523,7 +523,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     required
                     placeholder="Алибек"
                     value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
+                    onChange={(e) => {
+                      setFirstName(e.target.value);
+                      if (blacklistError) setBlacklistError(null);
+                    }}
                     className={`w-full rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none font-medium border ${
                       step2Submitted && !isFirstNameValid
                         ? 'border-red-500 bg-red-50/40'
@@ -546,7 +549,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     required
                     placeholder="Жумагулов"
                     value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
+                    onChange={(e) => {
+                      setLastName(e.target.value);
+                      if (blacklistError) setBlacklistError(null);
+                    }}
                     className={`w-full rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none font-medium border ${
                       step2Submitted && !isLastNameValid
                         ? 'border-red-500 bg-red-50/40'
@@ -598,7 +604,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     type="date"
                     required
                     value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
+                    onChange={(e) => {
+                      setBirthDate(e.target.value);
+                      if (blacklistError) setBlacklistError(null);
+                    }}
                     className={`w-full rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none font-medium border ${
                       step2Submitted && !isBirthDateValid
                         ? 'border-red-500 bg-red-50/40'
@@ -628,7 +637,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     required
                     placeholder="runner@example.kz"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (blacklistError) setBlacklistError(null);
+                    }}
                     className={`w-full rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none font-medium border ${
                       step2Submitted && !isEmailValid
                         ? 'border-red-500 bg-red-50/40'
@@ -651,7 +663,10 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     required
                     placeholder="+7 (705) 123-45-67"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      if (blacklistError) setBlacklistError(null);
+                    }}
                     className={`w-full rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none font-medium border ${
                       step2Submitted && !isPhoneValid
                         ? 'border-red-500 bg-red-50/40'

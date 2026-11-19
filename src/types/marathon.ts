@@ -97,6 +97,7 @@ export interface EventOptionsConfig {
   charityDescription?: string; // e.g. "Средства пойдут на закупку спортивной формы..."
   enableStartClusters?: boolean; // Control start cluster & elite pace selection in registration
   resultsUrl?: string; // Optional direct results URL for this event
+  blacklist?: BlacklistEntry[]; // Cloud-synced athlete blacklist
 }
 
 export interface MarathonEvent {

@@ -14,7 +14,7 @@ const STORAGE_KEY_EMAIL_SERVER = 'qazaq_run_email_server_v2';
 const STORAGE_KEY_PROMOCODES = 'qazaq_run_promocodes_v2';
 const STORAGE_KEY_BLACKLIST = 'qazaq_run_blacklist_v1';
 
-function eventToDb(e: MarathonEvent) {
+function eventToDb(e: MarathonEvent, blacklist?: BlacklistEntry[]) {
   return {
     id: e.id,
     title: e.title,
@@ -35,7 +35,8 @@ function eventToDb(e: MarathonEvent) {
     sponsors: e.sponsors || [],
     options_config: {
       ...(e.optionsConfig || {}),
-      resultsUrl: e.resultsUrl || ''
+      resultsUrl: e.resultsUrl || '',
+      ...(blacklist !== undefined ? { blacklist } : {})
     }
   };
 }
@@ -202,6 +203,26 @@ class MarathonStorage {
       this.blacklist = [];
     }
 
+    // Listen for cross-tab localStorage updates (e.g. ban added in admin tab while registration tab is open)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (e) => {
+        try {
+          if (e.key === STORAGE_KEY_BLACKLIST) {
+            this.reloadBlacklistFromLocal();
+            window.dispatchEvent(new Event('marathon-storage-update'));
+          } else if (e.key === STORAGE_KEY_PARTICIPANTS && e.newValue) {
+            this.participants = JSON.parse(e.newValue);
+            window.dispatchEvent(new Event('marathon-storage-update'));
+          } else if (e.key === STORAGE_KEY_EVENTS && e.newValue) {
+            this.events = JSON.parse(e.newValue);
+            window.dispatchEvent(new Event('marathon-storage-update'));
+          }
+        } catch {
+          // Ignore malformed storage event payloads
+        }
+      });
+    }
+
     // If Supabase SQL is configured, sync in background
     if (isSupabaseConfigured && supabase) {
       this.syncFromSupabase();
@@ -222,10 +243,28 @@ class MarathonStorage {
 
       if (!eventsErr && dbEvents && dbEvents.length > 0) {
         this.events = dbEvents.map(dbToEvent);
+
+        // Merge cloud-synced blacklist entries from events' optionsConfig
+        const cloudEntries: BlacklistEntry[] = [];
+        for (const ev of this.events) {
+          if (Array.isArray(ev.optionsConfig?.blacklist) && ev.optionsConfig.blacklist.length > 0) {
+            cloudEntries.push(...ev.optionsConfig.blacklist);
+          }
+        }
+        if (cloudEntries.length > 0) {
+          const merged = new Map<string, BlacklistEntry>();
+          for (const localItem of this.blacklist) {
+            if (localItem && localItem.id) merged.set(localItem.id, localItem);
+          }
+          for (const cloudItem of cloudEntries) {
+            if (cloudItem && cloudItem.id) merged.set(cloudItem.id, cloudItem);
+          }
+          this.blacklist = Array.from(merged.values());
+        }
       } else if (!eventsErr && (!dbEvents || dbEvents.length === 0)) {
         // Seed initial events to Supabase if database table is empty
         for (const ev of this.events) {
-          await supabase.from('events').upsert(eventToDb(ev));
+          await supabase.from('events').upsert(eventToDb(ev, this.blacklist));
         }
       }
 
@@ -388,7 +427,7 @@ class MarathonStorage {
 
     // Async sync to SQL Database
     if (supabase) {
-      supabase.from('events').upsert(eventToDb(event)).then(({ error }) => {
+      supabase.from('events').upsert(eventToDb(event, this.blacklist)).then(({ error }) => {
         if (error) console.error('Supabase saveEvent error:', error);
       });
     }
@@ -1033,11 +1072,106 @@ class MarathonStorage {
     return digits;
   }
 
+  private normalizeNameToken(str?: string): string {
+    if (!str) return '';
+    return str
+      .trim()
+      .toLowerCase()
+      .replace(/ё/g, 'е')
+      .replace(/й/g, 'и')
+      .replace(/ә/g, 'а')
+      .replace(/і/g, 'и')
+      .replace(/ң/g, 'н')
+      .replace(/ғ/g, 'г')
+      .replace(/[үұ]/g, 'у')
+      .replace(/қ/g, 'к')
+      .replace(/ө/g, 'о')
+      .replace(/һ/g, 'х')
+      .replace(/[ьъ]/g, '')
+      .replace(/[^a-zа-я0-9]/g, '')
+      .replace(/(.)\1+/g, '$1');
+  }
+
+  private levenshteinDistance(a: string, b: string): number {
+    const m = a.length;
+    const n = b.length;
+    if (Math.abs(m - n) > 1) return Math.abs(m - n);
+    const dp: number[] = Array.from({ length: n + 1 }, (_, j) => j);
+    for (let i = 1; i <= m; i++) {
+      let prev = dp[0];
+      dp[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const temp = dp[j];
+        if (a[i - 1] === b[j - 1]) {
+          dp[j] = prev;
+        } else {
+          dp[j] = 1 + Math.min(prev, dp[j], dp[j - 1]);
+        }
+        prev = temp;
+      }
+    }
+    return dp[n];
+  }
+
+  private areNameTokensEqual(a?: string, b?: string): boolean {
+    const normA = this.normalizeNameToken(a);
+    const normB = this.normalizeNameToken(b);
+    if (!normA || !normB) return false;
+    if (normA === normB) return true;
+    if (normA.length >= 4 && normB.length >= 4) {
+      return this.levenshteinDistance(normA, normB) <= 1;
+    }
+    return false;
+  }
+
+  private reloadBlacklistFromLocal(): void {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_BLACKLIST);
+      if (stored !== null) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          this.blacklist = parsed;
+        }
+      }
+    } catch {
+      // Ignore storage read errors
+    }
+  }
+
+  private syncBlacklistToCloud(): void {
+    if (!supabase || this.events.length === 0) return;
+    const primaryEvent = this.events[0];
+    const updatedOptions = {
+      ...(primaryEvent.optionsConfig || {
+        enableTShirt: true,
+        tShirtPrice: 0,
+        enableMedalEngraving: true,
+        medalEngravingPrice: 2000,
+        enablePastaParty: true,
+        pastaPartyPrice: 3500,
+        enableCharity: true
+      }),
+      blacklist: this.blacklist
+    };
+    primaryEvent.optionsConfig = updatedOptions;
+    this.persistLocalOnly();
+
+    supabase
+      .from('events')
+      .update({ options_config: updatedOptions })
+      .eq('id', primaryEvent.id)
+      .then(({ error }) => {
+        if (error) console.error('Supabase syncBlacklistToCloud error:', error);
+      });
+  }
+
   public getBlacklist(): BlacklistEntry[] {
+    this.reloadBlacklistFromLocal();
     return [...this.blacklist];
   }
 
   public addToBlacklist(entry: Omit<BlacklistEntry, 'id' | 'createdAt' | 'normalizedPhone'>): BlacklistEntry {
+    this.reloadBlacklistFromLocal();
     const cleanPhone = this.cleanPhoneDigits(entry.phone);
     const newEntry: BlacklistEntry = {
       ...entry,
@@ -1047,10 +1181,12 @@ class MarathonStorage {
     };
     this.blacklist.unshift(newEntry);
     this.persist();
+    this.syncBlacklistToCloud();
     return newEntry;
   }
 
   public updateBlacklistEntry(entry: BlacklistEntry): BlacklistEntry {
+    this.reloadBlacklistFromLocal();
     const cleanPhone = this.cleanPhoneDigits(entry.phone);
     const idx = this.blacklist.findIndex(b => b.id === entry.id);
     if (idx >= 0) {
@@ -1059,13 +1195,16 @@ class MarathonStorage {
         normalizedPhone: cleanPhone
       };
       this.persist();
+      this.syncBlacklistToCloud();
     }
     return entry;
   }
 
   public removeFromBlacklist(id: string): void {
+    this.reloadBlacklistFromLocal();
     this.blacklist = this.blacklist.filter(b => b.id !== id);
     this.persist();
+    this.syncBlacklistToCloud();
   }
 
   public checkBlacklist(data: {
@@ -1075,14 +1214,15 @@ class MarathonStorage {
     lastName?: string;
     birthDate?: string;
   }): { blocked: boolean; entry?: BlacklistEntry; reason?: string } {
+    this.reloadBlacklistFromLocal();
     if (!this.blacklist || this.blacklist.length === 0) {
       return { blocked: false };
     }
 
     const inputPhone = this.cleanPhoneDigits(data.phone);
     const inputEmail = (data.email || '').trim().toLowerCase();
-    const inputFirst = (data.firstName || '').trim().toLowerCase();
-    const inputLast = (data.lastName || '').trim().toLowerCase();
+    const inputFirst = (data.firstName || '').trim();
+    const inputLast = (data.lastName || '').trim();
     const inputBirth = (data.birthDate || '').trim();
 
     const now = Date.now();
@@ -1092,7 +1232,8 @@ class MarathonStorage {
 
       // Check if temporary block has expired
       if (!item.isPermanent && item.blockedUntil) {
-        const untilTime = new Date(item.blockedUntil).getTime();
+        const untilStr = !/T/.test(item.blockedUntil) ? `${item.blockedUntil}T23:59:59` : item.blockedUntil;
+        const untilTime = new Date(untilStr).getTime();
         if (!isNaN(untilTime) && untilTime < now) {
           continue;
         }
@@ -1102,8 +1243,8 @@ class MarathonStorage {
 
       // 1. Phone match
       if (inputPhone && item.normalizedPhone && inputPhone.length >= 10 && item.normalizedPhone.length >= 10) {
-        if (inputPhone === item.normalizedPhone || 
-            inputPhone.endsWith(item.normalizedPhone.slice(-10)) || 
+        if (inputPhone === item.normalizedPhone ||
+            inputPhone.endsWith(item.normalizedPhone.slice(-10)) ||
             item.normalizedPhone.endsWith(inputPhone.slice(-10))) {
           matched = true;
         }
@@ -1117,22 +1258,42 @@ class MarathonStorage {
         }
       }
 
-      // 3. Full Name + BirthDate match
+      const itemFirst = (item.firstName || '').trim();
+      const itemLast = (item.lastName || '').trim();
+
+      // 3. Full Name match (First + Last in any order, fuzzy/phonetic, regardless of birthDate/email/phone)
       if (!matched && inputFirst && inputLast) {
-        const itemFirst = (item.firstName || '').trim().toLowerCase();
-        const itemLast = (item.lastName || '').trim().toLowerCase();
+        const directPairMatch =
+          (this.areNameTokensEqual(inputFirst, itemFirst) && this.areNameTokensEqual(inputLast, itemLast)) ||
+          (this.areNameTokensEqual(inputFirst, itemLast) && this.areNameTokensEqual(inputLast, itemFirst));
 
-        const nameMatches = (inputFirst === itemFirst && inputLast === itemLast) ||
-                            (inputFirst === itemLast && inputLast === itemFirst);
-
-        if (nameMatches) {
-          if (inputBirth && item.birthDate) {
-            if (inputBirth === item.birthDate.trim()) {
-              matched = true;
+        if (directPairMatch) {
+          matched = true;
+        } else {
+          const itemWords = (item.fullName || `${itemLast} ${itemFirst}`).trim().split(/\s+/).filter(Boolean);
+          if (itemWords.length >= 2) {
+            outer: for (let i = 0; i < itemWords.length; i++) {
+              if (!this.areNameTokensEqual(inputFirst, itemWords[i])) continue;
+              for (let j = 0; j < itemWords.length; j++) {
+                if (i === j) continue;
+                if (this.areNameTokensEqual(inputLast, itemWords[j])) {
+                  matched = true;
+                  break outer;
+                }
+              }
             }
-          } else {
-            matched = true;
           }
+        }
+      }
+
+      // 4. Last Name + BirthDate match (catches nickname/modified first name with same surname & DOB)
+      if (!matched && inputBirth && item.birthDate && inputBirth === item.birthDate.trim()) {
+        if (
+          this.areNameTokensEqual(inputLast, itemLast) ||
+          this.areNameTokensEqual(inputLast, itemFirst) ||
+          this.areNameTokensEqual(inputFirst, itemLast)
+        ) {
+          matched = true;
         }
       }
 
