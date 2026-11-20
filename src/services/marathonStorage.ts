@@ -1116,7 +1116,15 @@ class MarathonStorage {
 
   private normalizeNameToken(str?: string): string {
     if (!str) return '';
-    return str
+    const cyrToLat: Record<string, string> = {
+      'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e',
+      'ж': 'j', 'з': 'z', 'и': 'i', 'к': 'k', 'л': 'l', 'м': 'm',
+      'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't',
+      'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'c', 'ч': 'ch', 'ш': 'sh',
+      'щ': 'sh', 'ы': 'i', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+    };
+
+    const preNormalized = str
       .trim()
       .toLowerCase()
       .replace(/ё/g, 'е')
@@ -1129,15 +1137,34 @@ class MarathonStorage {
       .replace(/қ/g, 'к')
       .replace(/ө/g, 'о')
       .replace(/һ/g, 'х')
-      .replace(/[ьъ]/g, '')
-      .replace(/[^a-zа-я0-9]/g, '')
+      .replace(/[ьъ]/g, '');
+
+    let transliterated = '';
+    for (const ch of preNormalized) {
+      transliterated += cyrToLat[ch] ?? ch;
+    }
+
+    return transliterated
+      .replace(/shch|sch/g, 'sh')
+      .replace(/dzh|dj|zh/g, 'j')
+      .replace(/kh/g, 'h')
+      .replace(/ts|tc|tz/g, 'c')
+      .replace(/ph/g, 'f')
+      .replace(/ye|ie/g, 'e')
+      .replace(/iu/g, 'yu')
+      .replace(/ia/g, 'ya')
+      .replace(/yo/g, 'o')
+      .replace(/y/g, 'i')
+      .replace(/q/g, 'k')
+      .replace(/w/g, 'v')
+      .replace(/x/g, 'ks')
+      .replace(/[^a-z0-9]/g, '')
       .replace(/(.)\1+/g, '$1');
   }
 
   private levenshteinDistance(a: string, b: string): number {
     const m = a.length;
     const n = b.length;
-    if (Math.abs(m - n) > 1) return Math.abs(m - n);
     const dp: number[] = Array.from({ length: n + 1 }, (_, j) => j);
     for (let i = 1; i <= m; i++) {
       let prev = dp[0];
@@ -1160,6 +1187,9 @@ class MarathonStorage {
     const normB = this.normalizeNameToken(b);
     if (!normA || !normB) return false;
     if (normA === normB) return true;
+    if (normA.length >= 8 && normB.length >= 8) {
+      return this.levenshteinDistance(normA, normB) <= 2;
+    }
     if (normA.length >= 4 && normB.length >= 4) {
       return this.levenshteinDistance(normA, normB) <= 1;
     }
@@ -1285,10 +1315,11 @@ class MarathonStorage {
       let matched = false;
 
       // 1. Phone match
-      if (inputPhone && item.normalizedPhone && inputPhone.length >= 10 && item.normalizedPhone.length >= 10) {
-        if (inputPhone === item.normalizedPhone ||
-            inputPhone.endsWith(item.normalizedPhone.slice(-10)) ||
-            item.normalizedPhone.endsWith(inputPhone.slice(-10))) {
+      const itemPhone = item.normalizedPhone || this.cleanPhoneDigits(item.phone);
+      if (inputPhone && itemPhone && inputPhone.length >= 10 && itemPhone.length >= 10) {
+        if (inputPhone === itemPhone ||
+            inputPhone.endsWith(itemPhone.slice(-10)) ||
+            itemPhone.endsWith(inputPhone.slice(-10))) {
           matched = true;
         }
       }
@@ -1329,12 +1360,13 @@ class MarathonStorage {
         }
       }
 
-      // 4. Last Name + BirthDate match (catches nickname/modified first name with same surname & DOB)
+      // 4. BirthDate + Name match (catches nickname/modified first or last name with same DOB)
       if (!matched && inputBirth && item.birthDate && inputBirth === item.birthDate.trim()) {
         if (
           this.areNameTokensEqual(inputLast, itemLast) ||
           this.areNameTokensEqual(inputLast, itemFirst) ||
-          this.areNameTokensEqual(inputFirst, itemLast)
+          this.areNameTokensEqual(inputFirst, itemLast) ||
+          this.areNameTokensEqual(inputFirst, itemFirst)
         ) {
           matched = true;
         }
