@@ -103,8 +103,6 @@ function participantToDb(p: Participant) {
     total_amount: p.totalAmount,
     payment_status: p.paymentStatus || 'paid',
     payment_method: p.paymentMethod || 'kaspi',
-    promocode_used: p.promocodeUsed || null,
-    discount_amount: p.discountAmount || 0,
     registration_date: p.registrationDate,
     checked_in_expo: Boolean(p.checkedInExpo)
   };
@@ -156,6 +154,7 @@ class MarathonStorage {
   private blacklist: BlacklistEntry[] = [];
   private adminAuth: AdminAuthConfig = { ...DEFAULT_ADMIN_AUTH };
   private isSyncing = false;
+  private realtimeSyncTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.init();
@@ -309,14 +308,22 @@ class MarathonStorage {
         }
       }
 
-      // 2. Fetch participants
+      // 2. Fetch participants (preserve recent local registrations made within the last 30s)
       const { data: dbParts, error: partsErr } = await supabase
         .from('participants')
         .select('*')
         .order('registration_date', { ascending: false });
 
       if (!partsErr && dbParts && dbParts.length > 0) {
-        this.participants = dbParts.map(dbToParticipant);
+        const fetched = dbParts.map(dbToParticipant);
+        const fetchedIds = new Set(fetched.map(p => p.id));
+        const nowMs = Date.now();
+        const recentLocal = this.participants.filter(p => {
+          if (fetchedIds.has(p.id)) return false;
+          const regTime = new Date(p.registrationDate).getTime();
+          return !isNaN(regTime) && nowMs - regTime < 30000;
+        });
+        this.participants = [...recentLocal, ...fetched];
       }
 
       // Persist local cache & notify UI
@@ -331,15 +338,19 @@ class MarathonStorage {
 
   private setupRealtimeSubscription() {
     if (!supabase) return;
+    const scheduleSync = () => {
+      if (this.realtimeSyncTimer) {
+        clearTimeout(this.realtimeSyncTimer);
+      }
+      this.realtimeSyncTimer = setTimeout(() => {
+        this.syncFromSupabase();
+      }, 400);
+    };
     try {
       supabase
         .channel('marathon_cloud_sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-          this.syncFromSupabase();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, () => {
-          this.syncFromSupabase();
-        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, scheduleSync)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, scheduleSync)
         .subscribe();
     } catch (e) {
       console.warn('Realtime subscription error', e);
@@ -510,25 +521,43 @@ class MarathonStorage {
       ? distance.bibStartNumber
       : 1;
 
-    // Existing registered participants on this distance
-    const count = this.participants.filter(p => p.distanceId === distanceId).length;
-    const currentNum = startNum + count;
-
-    // Format with leading zeros (e.g. 3 digits: 001, 002, 300)
+    // Collision-free allocation using a Set of taken bibs for (eventId, distanceId)
     const padLength = distance?.bibDigitsPadding || 3;
-    const formattedNum = currentNum.toString().padStart(padLength, '0');
+    const takenBibs = new Set(
+      this.participants
+        .filter(p => p.eventId === eventId && p.distanceId === distanceId)
+        .map(p => p.bibNumber)
+    );
 
-    return `${prefix}-${formattedNum}`;
+    let currentNum = startNum;
+    let candidate = `${prefix}-${currentNum.toString().padStart(padLength, '0')}`;
+    while (takenBibs.has(candidate)) {
+      currentNum++;
+      candidate = `${prefix}-${currentNum.toString().padStart(padLength, '0')}`;
+    }
+
+    return candidate;
   }
 
   public registerParticipant(data: Omit<Participant, 'id' | 'bibNumber' | 'registrationDate' | 'checkedInExpo'> & { bibNumber?: string }): Participant {
     const event = this.getEventById(data.eventId);
     const distance = event?.distances.find(d => d.id === data.distanceId);
-    const bibNumber = data.bibNumber || this.getNextBibNumber(data.eventId, data.distanceId);
+
+    const bibTaken = Boolean(
+      data.bibNumber &&
+      this.participants.some(
+        p => p.eventId === data.eventId && p.distanceId === data.distanceId && p.bibNumber === data.bibNumber
+      )
+    );
+    const bibNumber = (!data.bibNumber || bibTaken)
+      ? this.getNextBibNumber(data.eventId, data.distanceId)
+      : data.bibNumber;
+
+    const idPrefix = data.emergencyContact === 'LOAD_TEST_SIMULATION' ? 'runner-sim-' : 'runner-';
 
     const newParticipant: Participant = {
       ...data,
-      id: 'runner-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      id: idPrefix + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
       bibNumber,
       registrationDate: new Date().toISOString(),
       checkedInExpo: false
@@ -547,9 +576,11 @@ class MarathonStorage {
       );
     }
 
-    // Update distance slot count
+    // Recalculate actual registeredCount on this distance
     if (event && distance) {
-      distance.registeredCount = (distance.registeredCount || 0) + 1;
+      distance.registeredCount = this.participants.filter(
+        p => p.eventId === event.id && p.distanceId === distance.id
+      ).length;
       this.saveEvent(event);
     } else {
       this.persist();
@@ -563,6 +594,49 @@ class MarathonStorage {
     }
 
     return newParticipant;
+  }
+
+  public cleanupSimulatedParticipants(eventId?: string): number {
+    const isSimulated = (p: Participant) =>
+      p.id.startsWith('runner-sim-') || p.emergencyContact === 'LOAD_TEST_SIMULATION';
+
+    const toRemove = this.participants.filter(
+      p => isSimulated(p) && (!eventId || p.eventId === eventId)
+    );
+    if (toRemove.length === 0) return 0;
+
+    const removeIds = new Set(toRemove.map(p => p.id));
+    const affectedEventIds = new Set(toRemove.map(p => p.eventId));
+
+    this.participants = this.participants.filter(p => !removeIds.has(p.id));
+    this.subscribers = this.subscribers.filter(s => !s.email.toLowerCase().endsWith('@loadtest.aktobe.kz'));
+
+    for (const evId of affectedEventIds) {
+      const ev = this.getEventById(evId);
+      if (ev) {
+        ev.distances = ev.distances.map(d => ({
+          ...d,
+          registeredCount: this.participants.filter(p => p.eventId === ev.id && p.distanceId === d.id).length
+        }));
+        this.saveEvent(ev);
+      }
+    }
+
+    if (affectedEventIds.size === 0) {
+      this.persist();
+    }
+
+    if (supabase) {
+      let query = supabase.from('participants').delete().eq('emergency_contact', 'LOAD_TEST_SIMULATION');
+      if (eventId) {
+        query = query.eq('event_id', eventId);
+      }
+      query.then(({ error }) => {
+        if (error) console.error('Supabase cleanupSimulatedParticipants error:', error);
+      });
+    }
+
+    return toRemove.length;
   }
 
   public updateParticipant(participant: Participant): Participant {
